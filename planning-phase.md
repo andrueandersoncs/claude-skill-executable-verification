@@ -1,15 +1,18 @@
 # Planning Phase: Precondition Checks
 
-The planning phase translates research findings into an actionable implementation plan with **lightweight verification** that integration points are ready.
+The planning phase translates research findings into an actionable implementation plan with **verification** that integration points are ready.
 
 ## Core Principle
 
-**Don't re-verify everything. Just check that preconditions hold.**
+**Verify what's new - don't duplicate research verification.**
 
-Research already proved how the codebase works. Planning verifies that:
-- Required files exist
+Research already proved how the codebase works. Planning verifies new things discovered while breaking down the plan:
+- Preconditions for each implementation step
 - Integration points are available
 - No blocking conflicts exist
+- New dependencies or patterns not covered in research
+
+Use deep verification where needed - the goal is avoiding redundancy, not reducing depth.
 
 ## What to Verify
 
@@ -33,35 +36,43 @@ Focus on **preconditions** - things that must be true before each implementation
    - Are required imports available?
    - Do helper functions exist?
 
-## Verification Depth: Lighter than Research
+## Verification Depth
 
-Planning checks are **simpler** than research:
+Planning verification can be as deep as needed - the key is verifying **new things**, not re-verifying what research already confirmed.
 
-### Research (Deep):
-```typescript
-verify: async () => {
-  // Parse AST, analyze structure, trace dependencies
-  const classes = project.getSourceFiles().flatMap(f => f.getClasses());
-  for (const cls of classes) {
-    const constructor = cls.getConstructors()[0];
-    // Complex analysis...
-  }
-  return result;
-}
-```
-
-### Planning (Light):
+**Simple checks** when integration points are straightforward:
 ```typescript
 check: () => {
-  // Simple file read and string matching
   const content = fs.readFileSync("src/services/AuthService.ts", "utf-8");
   return content.includes("export") && content.includes("authenticate");
 }
 ```
 
+**Deep checks** when discovering new integration complexities:
+```typescript
+check: async () => {
+  // AST analysis to verify a newly-discovered pattern
+  const classes = project.getSourceFiles().flatMap(f => f.getClasses());
+  for (const cls of classes) {
+    const constructor = cls.getConstructors()[0];
+    // Verify dependency injection pattern for new service integration
+  }
+  return result;
+}
+```
+
 ## Planning Template Structure
 
-Create `planning/preconditions.ts` (or `.js`, `.py`) with this structure:
+Create a feature-specific file like `planning/<feature-name>.ts` (or `.js`, `.py`):
+
+```
+planning/
+├── oauth-authentication.ts    # Preconditions for OAuth implementation
+├── fix-cart-calculation.ts    # Preconditions for cart bug fix
+└── refactor-api-layer.ts      # Preconditions for API refactoring
+```
+
+Use this structure:
 
 ```typescript
 import * as fs from "fs";
@@ -369,23 +380,23 @@ export const plan = [
 
 ## Running Planning Verification
 
-Add to `package.json`:
+Run feature-specific verification directly:
+```bash
+npx tsx planning/oauth-authentication.ts
+npx tsx planning/fix-cart-calculation.ts
+# or
+node planning/oauth-authentication.js
+python planning/oauth_authentication.py
+```
 
+Or add convenience scripts for frequently-run verifications:
 ```json
 {
   "scripts": {
-    "verify:plan": "tsx planning/preconditions.ts"
+    "plan:oauth": "tsx planning/oauth-authentication.ts",
+    "plan:cart-fix": "tsx planning/fix-cart-calculation.ts"
   }
 }
-```
-
-Or run directly:
-```bash
-npx tsx planning/preconditions.ts
-# or
-node planning/preconditions.js
-# or
-python planning/preconditions.py
 ```
 
 ## When to Move to Implementation
@@ -472,10 +483,10 @@ This shows **step dependencies** - each step's preconditions depend on the previ
 
 ## Pro Tips
 
-1. **Keep checks simple**
-   - File reads and string matching
-   - No complex AST parsing (that was research)
-   - Fast to run
+1. **Match depth to need**
+   - Simple file checks for straightforward preconditions
+   - Deep AST analysis when discovering new integration complexities
+   - Don't artificially limit depth - just avoid duplicating research
 
 2. **Make failures informative**
    ```typescript
@@ -498,8 +509,8 @@ This shows **step dependencies** - each step's preconditions depend on the previ
    - Tests last
 
 4. **Don't duplicate research**
-   - Research: "How does auth work?" (deep AST analysis)
-   - Planning: "Does AuthService exist?" (simple file check)
+   - If research verified an architectural pattern, don't re-verify it
+   - But DO deeply verify new integration points discovered during planning
 
 5. **Plan for rollback**
    - Each step should be reversible

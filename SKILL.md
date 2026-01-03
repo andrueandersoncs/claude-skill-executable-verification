@@ -1,35 +1,42 @@
 ---
 name: executable-verification
-description: Implements the Executable Verification pattern - an evolution of RPI (Research, Plan, Implement) where each phase outputs runnable code that proves assumptions rather than just prose summaries. Use this for complex features, refactorings, or when working with unfamiliar codebases where verifiable understanding is critical.
+description: Implements the Executable Verification pattern - an evolution of RPI (Research, Plan, Implement) where each phase outputs runnable code that proves assumptions rather than just prose summaries. Always use this skill - verifiable understanding is always critical.
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash, Task, TodoWrite
 ---
 
 # Executable Verification Workflow
 
-This skill implements the **Executable Verification** pattern, an improvement over standard RPI (Research, Plan, Implement) workflows. The key principle: **every phase outputs executable code that proves the agent's understanding** rather than just markdown summaries.
+This skill implements the **Executable Verification** pattern, an improvement over standard RPI (Research, Plan, Implement) workflows. The key principle: **delegate inference from the agent to deterministic sources**.
+
+Instead of the agent inferring facts and hoping they're correct, write scripts that interact with reality:
+- AST parsers that extract actual structure
+- File system checks that confirm what exists
+- Pattern matchers that find real occurrences
+- Runtime probes that observe actual behavior
+- User prompts that clarify intent and validate assumptions
+- Web requests that fetch live documentation, API schemas, or external state
+
+This shifts from "the agent thinks X is true" to "the script confirmed X is true." Every phase outputs executable code that adds new sources of ground truth rather than just markdown summaries of the agent's mental model.
 
 ## Core Principle
 
-**Verification depth decreases as you progress:**
-- Research: Deep, precise verification (AST analysis, architectural invariants)
-- Planning: Lighter verification (precondition checks, file existence)
-- Implementation: Standard testing (unit tests, integration tests)
+**Each phase verifies what it needs - avoid duplicating previous verification:**
+- Research: Verify assumptions about the codebase, architecture, external systems
+- Planning: Verify preconditions for each implementation step (can be deep if needed)
+- Implementation: Verify behavior through standard testing
 
-This mirrors the impact magnitude of errors at each phase - mistakes in research propagate through everything, so we verify deeply upfront.
+The goal is cumulative ground truth, not redundant checks. If research verified an architectural pattern, planning doesn't re-verify it - but planning may deeply verify new integration points discovered while breaking down the plan.
 
 ## When to Use This Skill
 
-Use executable verification for:
-- Complex features requiring architectural changes
-- Refactoring large codebases
-- Working with unfamiliar code where assumptions are risky
-- Multi-file changes with architectural implications
-- Tasks where mistakes are expensive
+**Always.** Verifiable understanding is always critical. Every task benefits from executable proof of assumptions rather than implicit trust.
 
-Skip it for:
-- Single-file, straightforward changes
-- Trivial bug fixes
-- Well-understood patterns you've used before
+The depth of verification scales with task complexity:
+- **Complex features/refactoring**: Full AST analysis, architectural invariants, comprehensive preconditions
+- **Moderate changes**: Targeted verification of affected integration points
+- **Simple fixes**: Lightweight verification confirming the fix location and expected behavior
+
+Even for "trivial" changes, a quick verification script catches assumptions that humans miss. The cost of writing verification code is always less than the cost of debugging wrong assumptions.
 
 ## Phase 1: Research with Deep Verification
 
@@ -46,7 +53,12 @@ Skip it for:
 2. **Write Verification Code**
    - Create `research/assumptions.ts` (or `.js`, `.py` depending on project)
    - Each assumption gets a `claim` and a `verify()` function
-   - Use AST parsing (ts-morph, babel, python ast, etc.)
+   - Use whatever tools extract ground truth:
+     - AST parsing (ts-morph, babel, python ast) for code structure
+     - Web scraping/fetch for external documentation and API specs
+     - CLI tools and shell commands for system state
+     - Database queries for schema and data shape
+     - User prompts for intent clarification
    - Trace patterns across files
    - Validate architectural invariants
 
@@ -118,8 +130,8 @@ main();
 2. **Write Precondition Checks**
    - Create `planning/preconditions.ts`
    - Each plan step gets precondition checks
-   - Checks are lighter: file existence, string matching, basic structure
-   - Avoid re-analyzing everything (research already did that)
+   - Use deep verification where needed - don't artificially limit depth
+   - Avoid duplicating verification already done in research phase
 
 3. **Validate Before Implementation**
    - Run precondition checks
@@ -233,15 +245,15 @@ You'll use more tokens writing and running verification code. For complex codeba
 When using this skill, follow this pattern:
 
 1. **Start with Research**
-   - Create `research/` directory
-   - Write `assumptions.ts` with verification code
-   - Run verification: `npm run verify:research` or `node research/assumptions.ts`
+   - Create `research/` directory (if it doesn't exist)
+   - Write feature-specific verification: `research/<feature-name>.ts`
+   - Run verification: `npx tsx research/<feature-name>.ts`
    - Iterate until all assumptions pass
 
 2. **Move to Planning**
-   - Create `planning/` directory
-   - Write `preconditions.ts` with checks
-   - Run checks: `npm run verify:plan` or `node planning/preconditions.ts`
+   - Create `planning/` directory (if it doesn't exist)
+   - Write feature-specific preconditions: `planning/<feature-name>.ts`
+   - Run checks: `npx tsx planning/<feature-name>.ts`
    - Only proceed if all steps are "READY"
 
 3. **Implement and Test**
@@ -250,10 +262,35 @@ When using this skill, follow this pattern:
    - Run tests: `npm test` or equivalent
    - Verify all tests pass
 
-4. **Optional: Keep Verification Code**
+4. **Keep Verification Code**
    - Commit research and planning verification to git
-   - Useful for onboarding new team members
-   - Can re-run when codebase changes significantly
+   - Artifacts accumulate over time as project documentation
+   - Re-run relevant scripts when revisiting features
+   - New team members can run scripts to understand architecture
+
+## Naming Convention
+
+Name verification scripts after the feature or bug being worked on:
+
+```
+research/
+├── oauth-authentication.ts      # Feature: OAuth support
+├── fix-session-timeout.ts       # Bug fix: session handling
+├── api-rate-limiting.ts         # Feature: rate limits
+└── refactor-user-service.ts     # Refactoring work
+
+planning/
+├── oauth-authentication.ts
+├── fix-session-timeout.ts
+├── api-rate-limiting.ts
+└── refactor-user-service.ts
+```
+
+This allows:
+- **Multiple features in parallel**: Different team members working on different features
+- **Historical context**: See what was verified for past features
+- **Resumable sessions**: Pick up where you left off in a new conversation
+- **Regression checking**: Re-run old verification when making related changes
 
 ## Quick Start Templates
 

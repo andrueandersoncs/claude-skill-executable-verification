@@ -29,17 +29,21 @@ mkdir -p research planning
 
 ### 2. Copy Templates
 
+Copy templates and rename for your feature/bug:
+
 For TypeScript projects:
 ```bash
-cp .claude/skills/executable-verification/templates/research-typescript.ts research/assumptions.ts
-cp .claude/skills/executable-verification/templates/planning-template.ts planning/preconditions.ts
+cp .claude/skills/executable-verification/templates/research-typescript.ts research/my-feature.ts
+cp .claude/skills/executable-verification/templates/planning-template.ts planning/my-feature.ts
 ```
 
 For JavaScript projects:
 ```bash
-cp .claude/skills/executable-verification/templates/research-javascript.js research/assumptions.js
-cp .claude/skills/executable-verification/templates/planning-template.ts planning/preconditions.ts
+cp .claude/skills/executable-verification/templates/research-javascript.js research/my-feature.js
+cp .claude/skills/executable-verification/templates/planning-template.ts planning/my-feature.ts
 ```
+
+Name files after the feature or bug you're working on (e.g., `oauth-authentication.ts`, `fix-session-bug.ts`).
 
 ### 3. Install Dependencies
 
@@ -47,14 +51,19 @@ cp .claude/skills/executable-verification/templates/planning-template.ts plannin
 npm install -D ts-morph tsx
 ```
 
-### 4. Add Scripts to package.json
+### 4. Run Verification Scripts
 
+Run feature-specific scripts directly:
+```bash
+npx tsx research/oauth-authentication.ts
+npx tsx planning/oauth-authentication.ts
+```
+
+Optionally add convenience scripts to `package.json` for frequently-run verifications:
 ```json
 {
   "scripts": {
-    "verify:research": "tsx research/assumptions.ts",
-    "verify:plan": "tsx planning/preconditions.ts",
-    "verify:all": "npm run verify:research && npm run verify:plan"
+    "verify:oauth": "tsx research/oauth-authentication.ts && tsx planning/oauth-authentication.ts"
   }
 }
 ```
@@ -91,7 +100,7 @@ Let's walk through implementing a new feature using executable verification.
 
 #### Phase 1: Research
 
-Claude will create `research/assumptions.ts`:
+Claude will create `research/oauth-authentication.ts`:
 
 ```typescript
 export const assumptions = [
@@ -115,7 +124,7 @@ export const assumptions = [
 
 **Run verification:**
 ```bash
-npm run verify:research
+npx tsx research/oauth-authentication.ts
 ```
 
 **Output:**
@@ -125,14 +134,14 @@ npm run verify:research
 ✅ Authentication uses JWT tokens
 ✅ User model has email field
 ✅ Services use dependency injection
-❌ OAuth not already implemented
+✅ OAuth not already implemented
 
 ✅ All assumptions verified!
 ```
 
 #### Phase 2: Planning
 
-Claude creates `planning/preconditions.ts`:
+Claude creates `planning/oauth-authentication.ts`:
 
 ```typescript
 export const plan = [
@@ -155,7 +164,7 @@ export const plan = [
 
 **Run verification:**
 ```bash
-npm run verify:plan
+npx tsx planning/oauth-authentication.ts
 ```
 
 **Output:**
@@ -208,7 +217,7 @@ npm test
 
 ### Research Phase Customization
 
-Edit `research/assumptions.ts` to add your own assumptions:
+Edit your feature-specific research file (e.g., `research/oauth-authentication.ts`) to add assumptions:
 
 ```typescript
 {
@@ -230,7 +239,7 @@ Edit `research/assumptions.ts` to add your own assumptions:
 
 ### Planning Phase Customization
 
-Edit `planning/preconditions.ts` to match your implementation plan:
+Edit your feature-specific planning file (e.g., `planning/oauth-authentication.ts`) to match your implementation plan:
 
 ```typescript
 {
@@ -249,8 +258,8 @@ Edit `planning/preconditions.ts` to match your implementation plan:
 ```
 
 **Tips:**
-- Keep checks simple (no heavy AST parsing)
-- Verify integration points are ready
+- Use deep verification where needed for new discoveries
+- Avoid duplicating what research already verified
 - Check for conflicts (feature already exists)
 - Order steps by dependencies
 
@@ -278,28 +287,28 @@ This ensures assumptions remain valid as the codebase evolves.
 
 ## Keeping Verification Fresh
 
-### Option 1: Commit Verification Code
+### Recommended: Commit Feature-Specific Verification
 
-**Pros:**
-- Team members can see what was verified
-- Useful for onboarding
-- Can re-run when codebase changes
+With feature-specific naming, verification artifacts become valuable project documentation:
 
-**Cons:**
-- Extra files in the repo
-- May become outdated
+```
+research/
+├── oauth-authentication.ts     # Committed 3 months ago
+├── api-rate-limiting.ts        # Committed 2 months ago
+├── fix-session-timeout.ts      # Committed last week
+└── user-permissions.ts         # Current feature (WIP)
+```
 
-### Option 2: Treat as Temporary
+**Benefits:**
+- **Historical context**: See what was verified for past features
+- **Onboarding**: New team members run scripts to understand architecture
+- **Regression checking**: Re-run old verification when making related changes
+- **Resumable sessions**: Pick up where you left off in a new conversation
 
-**Pros:**
-- Clean repository
-- No maintenance burden
-
-**Cons:**
-- Lose verification artifacts
-- Can't re-run later
-
-**Recommendation:** Commit for significant features, skip for small changes.
+**Maintenance:**
+- Delete scripts for abandoned features
+- Update scripts when significant architecture changes occur
+- Run old scripts periodically to catch drift
 
 ## Troubleshooting
 
@@ -408,22 +417,22 @@ console.log(JSON.stringify(jsonOutput, null, 2));
 ## Summary
 
 ```bash
-# Setup (one time)
-.claude/skills/executable-verification/scripts/init-verification.sh
+# Setup directories (one time)
+mkdir -p research planning
+npm install -D ts-morph tsx
 
-# Research phase
-npm run verify:research
+# Research phase (feature-specific)
+npx tsx research/my-feature.ts
 
-# Planning phase
-npm run verify:plan
+# Planning phase (feature-specific)
+npx tsx planning/my-feature.ts
 
 # Implementation phase
 npm test
-
-# All at once
-npm run verify:all && npm test
 ```
+
+Name your verification scripts after the feature or bug (e.g., `oauth-authentication.ts`, `fix-cart-bug.ts`) to support multiple features and resumable sessions.
 
 ---
 
-**Remember:** Executable verification is about proving understanding through code, not just documenting assumptions. When verification passes, you **know** (not just think) you understand the codebase correctly.
+**Remember:** Executable verification is about delegating inference from the agent to deterministic sources. Instead of the agent inferring facts and hoping they're correct, scripts interact with reality - AST parsers, web requests, user prompts, system state. When verification passes, you **know** (not just think) the facts are correct.

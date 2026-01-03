@@ -94,17 +94,21 @@ mkdir -p research planning
 
 ### 2. Copy Templates
 
+Copy templates and rename for your feature/bug:
+
 For TypeScript projects:
 ```bash
-cp .claude/skills/executable-verification/templates/research-typescript.ts research/assumptions.ts
-cp .claude/skills/executable-verification/templates/planning-template.ts planning/preconditions.ts
+cp .claude/skills/executable-verification/templates/research-typescript.ts research/my-feature.ts
+cp .claude/skills/executable-verification/templates/planning-template.ts planning/my-feature.ts
 ```
 
 For JavaScript projects:
 ```bash
-cp .claude/skills/executable-verification/templates/research-javascript.js research/assumptions.js
-cp .claude/skills/executable-verification/templates/planning-template.ts planning/preconditions.ts
+cp .claude/skills/executable-verification/templates/research-javascript.js research/my-feature.js
+cp .claude/skills/executable-verification/templates/planning-template.ts planning/my-feature.ts
 ```
+
+Name files after the feature or bug (e.g., `oauth-authentication.ts`, `fix-session-bug.ts`).
 
 ### 3. Install Dependencies
 
@@ -119,14 +123,19 @@ bun add -D ts-morph tsx
 yarn add -D ts-morph tsx
 ```
 
-### 4. Add Scripts to package.json
+### 4. Run Verification Scripts
 
+Run feature-specific scripts directly:
+```bash
+npx tsx research/my-feature.ts
+npx tsx planning/my-feature.ts
+```
+
+Optionally add convenience scripts to `package.json` for frequently-run verifications:
 ```json
 {
   "scripts": {
-    "verify:research": "tsx research/assumptions.ts",
-    "verify:plan": "tsx planning/preconditions.ts",
-    "verify:all": "npm run verify:research && npm run verify:plan"
+    "verify:my-feature": "tsx research/my-feature.ts && tsx planning/my-feature.ts"
   }
 }
 ```
@@ -202,7 +211,7 @@ Make sure you're running verification scripts from the project root:
 
 ```bash
 cd /path/to/your/project
-bunx tsx research/assumptions.ts
+npx tsx research/my-feature.ts
 ```
 
 ## Next Steps
@@ -211,8 +220,8 @@ After installation:
 
 1. Read [USAGE.md](USAGE.md) for usage guide
 2. Try the skill: "Use executable verification to implement a feature"
-3. Customize templates in `research/` and `planning/`
-4. Run verification: `bunx tsx research/assumptions.ts`
+3. Create feature-specific scripts in `research/` and `planning/`
+4. Run verification: `npx tsx research/my-feature.ts`
 
 ## Support
 

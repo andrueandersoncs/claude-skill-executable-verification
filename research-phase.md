@@ -52,6 +52,8 @@ Focus on assumptions that are **directly relevant to the user's goal**. Don't ve
 
 ## Tools for Deep Verification
 
+Use whatever tools extract ground truth. The goal is delegating inference to deterministic sources.
+
 ### TypeScript/JavaScript: ts-morph
 
 ```typescript
@@ -175,9 +177,109 @@ const verifyRepositoryPattern = async () => {
 };
 ```
 
+### External Sources: Web Scraping & APIs
+
+Verify assumptions about external systems, documentation, or API contracts:
+
+```typescript
+// Verify API contract matches documentation
+const verifyApiContract = async () => {
+  const response = await fetch("https://api.example.com/openapi.json");
+  const spec = await response.json();
+
+  // Check expected endpoint exists
+  return spec.paths["/users"]?.post?.responses?.["201"] !== undefined;
+};
+
+// Scrape documentation for version compatibility
+const verifyVersionRequirements = async () => {
+  const response = await fetch("https://docs.example.com/requirements");
+  const html = await response.text();
+
+  // Check Node.js version requirement
+  return html.includes("Node.js 18") || html.includes("Node.js 20");
+};
+```
+
+### User Interaction: Clarifying Intent
+
+When assumptions can't be verified programmatically, prompt the user:
+
+```typescript
+import * as readline from "readline";
+
+const verifyWithUser = async (question: string): Promise<boolean> => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${question} (y/n): `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === "y");
+    });
+  });
+};
+
+// Example usage
+{
+  claim: "New feature should follow existing modal pattern",
+  verify: async () => {
+    // Try programmatic verification first
+    const hasModalPattern = fs.existsSync("src/components/Modal.tsx");
+    if (!hasModalPattern) {
+      // Fall back to user clarification
+      return verifyWithUser("No existing modal found. Should we create a new modal pattern?");
+    }
+    return true;
+  }
+}
+```
+
+### CLI & System State
+
+Verify system configuration and runtime state:
+
+```typescript
+import { execSync } from "child_process";
+
+// Verify database is accessible
+const verifyDatabaseConnection = () => {
+  try {
+    execSync("npx prisma db execute --stdin <<< 'SELECT 1'", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Verify correct Node version
+const verifyNodeVersion = () => {
+  const version = execSync("node --version").toString().trim();
+  const major = parseInt(version.replace("v", "").split(".")[0]);
+  return major >= 18;
+};
+
+// Verify git state
+const verifyCleanGitState = () => {
+  const status = execSync("git status --porcelain").toString();
+  return status.trim() === "";
+};
+```
+
 ## Research Template Structure
 
-Create `research/assumptions.ts` (or `.js`, `.py`) with this structure:
+Create a feature-specific file like `research/<feature-name>.ts` (or `.js`, `.py`):
+
+```
+research/
+├── oauth-authentication.ts    # Verifies auth architecture for OAuth feature
+├── fix-cart-calculation.ts    # Verifies cart logic for bug fix
+└── refactor-api-layer.ts      # Verifies API patterns for refactoring
+```
+
+Use this structure:
 
 ```typescript
 import { Project } from "ts-morph";
@@ -404,23 +506,23 @@ This proves an architectural pattern that affects how you'll write new code.
 
 ## Running Research Verification
 
-Add to `package.json`:
+Run feature-specific verification directly:
+```bash
+npx tsx research/oauth-authentication.ts
+npx tsx research/fix-cart-calculation.ts
+# or
+node research/oauth-authentication.js
+python research/oauth_authentication.py
+```
 
+Or add convenience scripts to `package.json` for frequently-run verifications:
 ```json
 {
   "scripts": {
-    "verify:research": "tsx research/assumptions.ts"
+    "verify:oauth": "tsx research/oauth-authentication.ts",
+    "verify:cart-fix": "tsx research/fix-cart-calculation.ts"
   }
 }
-```
-
-Or run directly:
-```bash
-npx tsx research/assumptions.ts
-# or
-node research/assumptions.js
-# or
-python research/assumptions.py
 ```
 
 ## When to Move to Planning

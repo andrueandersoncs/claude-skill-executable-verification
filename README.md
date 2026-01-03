@@ -17,20 +17,20 @@ Traditional RPI workflows have AI agents write markdown summaries at each phase:
 - **Planning**: Scripts that **validate** integration points are ready
 - **Implementation**: Standard tests that **verify** features work
 
-### The Gradient Principle
+### The Cumulative Principle
 
-Verification depth **decreases** as you progress:
+Each phase verifies what it needs - avoiding duplication, not depth:
 
-| Phase | Depth | Why |
-|-------|-------|-----|
-| Research | **Deep** (AST analysis) | Mistakes propagate everywhere |
-| Planning | **Light** (file checks) | Building on verified research |
-| Implementation | **Standard** (tests) | Structure already validated |
+| Phase | Focus | Verification |
+|-------|-------|--------------|
+| Research | Codebase assumptions | AST, web scraping, user prompts, system state |
+| Planning | Preconditions for steps | New integration points (can be deep if needed) |
+| Implementation | Behavior | Standard tests |
 
 ## ✨ Features
 
-- 🔍 **Deep Research Verification** - AST parsing with ts-morph, architectural invariants
-- ✅ **Lightweight Planning Checks** - File existence, pattern matching, preconditions
+- 🔍 **Deep Research Verification** - AST parsing, web scraping, user prompts, system state
+- ✅ **Planning Precondition Checks** - Verify integration points, avoid duplicating research
 - 🧪 **Standard Implementation Tests** - Unit/integration testing patterns
 - 📚 **Comprehensive Documentation** - Detailed guides for each phase
 - 🎨 **Ready-to-Use Templates** - TypeScript, JavaScript, and planning templates
@@ -141,7 +141,7 @@ Ready-to-use templates in \`templates/\`:
 ### 1. Research Phase
 
 \`\`\`bash
-bunx tsx research/assumptions.ts
+npx tsx research/bookmark-feature.ts
 \`\`\`
 
 **Output:**
@@ -155,7 +155,7 @@ bunx tsx research/assumptions.ts
 ### 2. Planning Phase
 
 \`\`\`bash
-bunx tsx planning/preconditions.ts
+npx tsx planning/bookmark-feature.ts
 \`\`\`
 
 **Output:**
@@ -168,12 +168,13 @@ bunx tsx planning/preconditions.ts
 
 ### 3. Implementation
 
-Build your feature, then verify:
+Build your feature, then run tests:
 
 \`\`\`bash
-bunx tsx planning/implementation-check.ts
 npm test
 \`\`\`
+
+Scripts are named after the feature (e.g., \`bookmark-feature.ts\`) so they accumulate over time and can be re-run in future sessions.
 
 ## 🎯 Benefits
 

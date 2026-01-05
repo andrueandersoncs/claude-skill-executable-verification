@@ -1,6 +1,6 @@
-# Planning Phase: Precondition Checks
+# Planning Phase: Pre/Post Condition Checks
 
-The planning phase translates research findings into an actionable implementation plan with **verification** that integration points are ready.
+The planning phase translates research findings into an actionable implementation plan with **verification** that integration points are ready and **success criteria** that prove implementation worked.
 
 ## Core Principle
 
@@ -8,33 +8,78 @@ The planning phase translates research findings into an actionable implementatio
 
 Research already proved how the codebase works. Planning verifies new things discovered while breaking down the plan:
 - Preconditions for each implementation step
+- Postconditions that define success
+- Invariants that must hold throughout
 - Integration points are available
 - No blocking conflicts exist
-- New dependencies or patterns not covered in research
 
 Use deep verification where needed - the goal is avoiding redundancy, not reducing depth.
 
+## The Three Check Types
+
+| Check Type | When It Runs | Purpose | Example |
+|------------|--------------|---------|---------|
+| **Preconditions** | `--phase=pre` only | "Ready to start?" | "OAuthService doesn't exist yet" |
+| **Postconditions** | `--phase=post` only | "Did it work?" | "OAuthService exists and exports provider" |
+| **Invariants** | Both phases | "Did we break anything?" | "AuthService still exports authenticate" |
+
+### Why This Matters
+
+Without postconditions, you can't:
+- **Re-verify after implementation**: Preconditions like "file doesn't exist" will fail after you create the file
+- **Resume interrupted work**: No way to know if a step completed successfully
+- **Regression check**: No defined success criteria to verify later
+- **Validate completeness**: Tests verify behavior, but postconditions verify structure
+
 ## What to Verify
 
-Focus on **preconditions** - things that must be true before each implementation step can begin.
+### Preconditions (Before Implementation)
 
-### Common Preconditions:
+Things that must be true before each implementation step can begin:
 
 1. **File/Module Existence**
    - Does the file I need to modify exist?
    - Is the module I need to extend available?
 
-2. **API Surface**
-   - Does the class/function I need exist?
-   - Does it have the expected signature?
-
-3. **No Conflicts**
+2. **No Conflicts**
    - Is the feature already implemented?
    - Will my changes conflict with existing code?
 
-4. **Dependencies Available**
+3. **Dependencies Available**
    - Are required imports available?
    - Do helper functions exist?
+
+### Postconditions (After Implementation)
+
+Things that must be true after implementation completes:
+
+1. **Created Artifacts**
+   - Does the new file/class/function exist?
+   - Does it export the expected interface?
+
+2. **Integration Complete**
+   - Is the new code wired into existing systems?
+   - Are imports/exports properly connected?
+
+3. **Configuration Updated**
+   - Are new env vars documented?
+   - Is the feature registered/enabled?
+
+### Invariants (Always True)
+
+Things that must remain true before AND after:
+
+1. **Backward Compatibility**
+   - Do existing exports still exist?
+   - Are existing interfaces unchanged?
+
+2. **Structural Integrity**
+   - Do test files still exist?
+   - Are critical files untouched?
+
+3. **Pattern Consistency**
+   - Does new code follow established patterns?
+   - Are naming conventions maintained?
 
 ## Verification Depth
 
@@ -67,9 +112,9 @@ Create a feature-specific file like `planning/<feature-name>.ts` (or `.js`, `.py
 
 ```
 planning/
-├── oauth-authentication.ts    # Preconditions for OAuth implementation
-├── fix-cart-calculation.ts    # Preconditions for cart bug fix
-└── refactor-api-layer.ts      # Preconditions for API refactoring
+├── oauth-authentication.ts    # Pre/post checks for OAuth implementation
+├── fix-cart-calculation.ts    # Pre/post checks for cart bug fix
+└── refactor-api-layer.ts      # Pre/post checks for API refactoring
 ```
 
 Use this structure:
@@ -78,13 +123,17 @@ Use this structure:
 import * as fs from "fs";
 import * as path from "path";
 
+type Check = {
+  description: string;
+  check: () => boolean;
+};
+
 interface PlanStep {
   name: string;
   description?: string;
-  preconditions: Array<{
-    description: string;
-    check: () => boolean;
-  }>;
+  preconditions: Check[];   // Must pass BEFORE implementation
+  postconditions: Check[];  // Must pass AFTER implementation
+  invariants: Check[];      // Must pass BOTH before AND after
 }
 
 export const plan: PlanStep[] = [
@@ -94,37 +143,48 @@ export const plan: PlanStep[] = [
     preconditions: [
       {
         description: "What must be true before this step",
-        check: () => {
-          // Simple check that returns true/false
-          return true;
-        },
+        check: () => true,
+      },
+    ],
+    postconditions: [
+      {
+        description: "What must be true after this step",
+        check: () => true,
+      },
+    ],
+    invariants: [
+      {
+        description: "What must remain true throughout",
+        check: () => true,
       },
     ],
   },
   // More steps...
 ];
 
-// Runner
+// Runner with phase support
 function main() {
-  console.log("📋 Validating Implementation Plan\n");
+  const phase = process.argv.includes("--phase=post") ? "post" : "pre";
+  console.log(`📋 Validating Implementation Plan (${phase}-implementation)\n`);
 
-  let allReady = true;
+  let allPassed = true;
   for (const step of plan) {
-    const results = step.preconditions.map((p) => ({
-      ...p,
-      passed: p.check(),
-    }));
+    // Select checks based on phase
+    const checks = phase === "pre"
+      ? [...step.preconditions, ...step.invariants]
+      : [...step.postconditions, ...step.invariants];
 
-    const stepReady = results.every((r) => r.passed);
-    const status = stepReady ? "✅ READY" : "❌ BLOCKED";
+    const results = checks.map((c) => ({ ...c, passed: c.check() }));
+    const stepPassed = results.every((r) => r.passed);
+    const status = stepPassed ? "✅ PASS" : "❌ FAIL";
 
     console.log(`${status} ${step.name}`);
     if (step.description) {
       console.log(`    ${step.description}`);
     }
 
-    if (!stepReady) {
-      allReady = false;
+    if (!stepPassed) {
+      allPassed = false;
       results
         .filter((r) => !r.passed)
         .forEach((r) => console.log(`    ❌ ${r.description}`));
@@ -132,11 +192,22 @@ function main() {
     console.log();
   }
 
-  console.log(allReady ? "✅ All steps ready to implement!" : "❌ Some steps are blocked");
-  process.exit(allReady ? 0 : 1);
+  const phaseLabel = phase === "pre" ? "ready to implement" : "implementation complete";
+  console.log(allPassed ? `✅ All steps ${phaseLabel}!` : `❌ Some checks failed`);
+  process.exit(allPassed ? 0 : 1);
 }
 
 main();
+```
+
+## Running Verification
+
+```bash
+# Before implementation - check preconditions + invariants
+npx tsx planning/oauth-authentication.ts --phase=pre
+
+# After implementation - check postconditions + invariants
+npx tsx planning/oauth-authentication.ts --phase=post
 ```
 
 ## Example: OAuth Implementation Plan
@@ -145,7 +216,17 @@ main();
 import * as fs from "fs";
 import * as path from "path";
 
-export const plan = [
+type Check = { description: string; check: () => boolean };
+
+interface PlanStep {
+  name: string;
+  description?: string;
+  preconditions: Check[];
+  postconditions: Check[];
+  invariants: Check[];
+}
+
+export const plan: PlanStep[] = [
   {
     name: "Create OAuthService class",
     description: "Handles OAuth flow for multiple providers",
@@ -158,11 +239,31 @@ export const plan = [
         description: "OAuthService doesn't already exist",
         check: () => !fs.existsSync("src/services/OAuthService.ts"),
       },
+    ],
+    postconditions: [
       {
-        description: "Can import AuthService for integration",
+        description: "OAuthService file exists",
+        check: () => fs.existsSync("src/services/OAuthService.ts"),
+      },
+      {
+        description: "OAuthService exports OAuthProvider type",
         check: () => {
-          return fs.existsSync("src/services/AuthService.ts");
+          const content = fs.readFileSync("src/services/OAuthService.ts", "utf-8");
+          return content.includes("export") && content.includes("OAuthProvider");
         },
+      },
+      {
+        description: "OAuthService exports authenticate method",
+        check: () => {
+          const content = fs.readFileSync("src/services/OAuthService.ts", "utf-8");
+          return content.includes("authenticate");
+        },
+      },
+    ],
+    invariants: [
+      {
+        description: "AuthService still exists",
+        check: () => fs.existsSync("src/services/AuthService.ts"),
       },
     ],
   },
@@ -176,6 +277,31 @@ export const plan = [
         check: () => fs.existsSync("src/routes/auth.ts"),
       },
       {
+        description: "No OAuth routes already defined",
+        check: () => {
+          const content = fs.readFileSync("src/routes/auth.ts", "utf-8");
+          return !content.toLowerCase().includes("/oauth");
+        },
+      },
+    ],
+    postconditions: [
+      {
+        description: "OAuth callback route exists",
+        check: () => {
+          const content = fs.readFileSync("src/routes/auth.ts", "utf-8");
+          return content.includes("/oauth/callback") || content.includes("oauth/callback");
+        },
+      },
+      {
+        description: "Route imports OAuthService",
+        check: () => {
+          const content = fs.readFileSync("src/routes/auth.ts", "utf-8");
+          return content.includes("OAuthService");
+        },
+      },
+    ],
+    invariants: [
+      {
         description: "Router uses Express-style routing",
         check: () => {
           const content = fs.readFileSync("src/routes/auth.ts", "utf-8");
@@ -183,10 +309,10 @@ export const plan = [
         },
       },
       {
-        description: "No OAuth routes already defined",
+        description: "Existing login route still present",
         check: () => {
           const content = fs.readFileSync("src/routes/auth.ts", "utf-8");
-          return !content.toLowerCase().includes("oauth");
+          return content.includes("/login");
         },
       },
     ],
@@ -197,79 +323,46 @@ export const plan = [
     description: "Add oauthProvider and oauthId fields to User",
     preconditions: [
       {
-        description: "User model exists",
-        check: () => {
-          return (
-            fs.existsSync("src/models/User.ts") || fs.existsSync("src/entities/User.ts")
-          );
-        },
-      },
-      {
         description: "Using Prisma for data modeling",
         check: () => fs.existsSync("prisma/schema.prisma"),
       },
       {
         description: "OAuth fields not already present",
         check: () => {
-          const schemaPath = "prisma/schema.prisma";
-          if (!fs.existsSync(schemaPath)) return false;
-
-          const schema = fs.readFileSync(schemaPath, "utf-8");
-          return !schema.includes("oauthProvider") && !schema.includes("oauthId");
+          const schema = fs.readFileSync("prisma/schema.prisma", "utf-8");
+          return !schema.includes("oauthProvider");
         },
       },
     ],
-  },
-
-  {
-    name: "Create database migration",
-    description: "Add OAuth columns to users table",
-    preconditions: [
+    postconditions: [
       {
-        description: "Prisma schema updated with OAuth fields",
+        description: "oauthProvider field added to User model",
         check: () => {
           const schema = fs.readFileSync("prisma/schema.prisma", "utf-8");
-          return schema.includes("oauthProvider") && schema.includes("oauthId");
+          return schema.includes("oauthProvider");
         },
       },
       {
-        description: "Prisma CLI available",
+        description: "oauthId field added to User model",
         check: () => {
-          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf-8"));
-          return (
-            packageJson.devDependencies?.prisma ||
-            packageJson.dependencies?.["@prisma/client"]
-          );
+          const schema = fs.readFileSync("prisma/schema.prisma", "utf-8");
+          return schema.includes("oauthId");
         },
       },
     ],
-  },
-
-  {
-    name: "Add OAuth configuration",
-    description: "Add OAuth client IDs and secrets to config",
-    preconditions: [
+    invariants: [
       {
-        description: "Config file exists",
+        description: "User model still has email field",
         check: () => {
-          return (
-            fs.existsSync("src/config/index.ts") ||
-            fs.existsSync("src/config.ts") ||
-            fs.existsSync(".env.example")
-          );
+          const schema = fs.readFileSync("prisma/schema.prisma", "utf-8");
+          return schema.includes("email");
         },
       },
       {
-        description: "Auth config section exists",
+        description: "User model still has password field",
         check: () => {
-          const configFiles = ["src/config/index.ts", "src/config.ts"].filter((f) =>
-            fs.existsSync(f)
-          );
-
-          return configFiles.some((file) => {
-            const content = fs.readFileSync(file, "utf-8");
-            return content.includes("auth") || content.includes("jwt");
-          });
+          const schema = fs.readFileSync("prisma/schema.prisma", "utf-8");
+          return schema.includes("password");
         },
       },
     ],
@@ -281,36 +374,42 @@ export const plan = [
     preconditions: [
       {
         description: "Test infrastructure exists",
+        check: () => fs.existsSync("src/__tests__") || fs.existsSync("tests"),
+      },
+      {
+        description: "OAuthService exists to test",
+        check: () => fs.existsSync("src/services/OAuthService.ts"),
+      },
+    ],
+    postconditions: [
+      {
+        description: "OAuth test file created",
         check: () => {
           return (
-            fs.existsSync("src/__tests__") ||
-            fs.existsSync("test") ||
-            fs.existsSync("tests")
+            fs.existsSync("src/__tests__/oauth.test.ts") ||
+            fs.existsSync("tests/oauth.test.ts")
           );
         },
       },
       {
-        description: "Test framework configured",
+        description: "Test covers authenticate method",
         check: () => {
-          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf-8"));
-          return (
-            packageJson.devDependencies?.vitest ||
-            packageJson.devDependencies?.jest ||
-            packageJson.scripts?.test
-          );
+          const testPaths = ["src/__tests__/oauth.test.ts", "tests/oauth.test.ts"];
+          const testFile = testPaths.find((p) => fs.existsSync(p));
+          if (!testFile) return false;
+          const content = fs.readFileSync(testFile, "utf-8");
+          return content.includes("authenticate");
         },
       },
+    ],
+    invariants: [
       {
-        description: "Auth tests exist as template",
+        description: "Existing auth tests still present",
         check: () => {
-          const testDirs = ["src/__tests__", "test", "tests"].filter((d) =>
-            fs.existsSync(d)
+          return (
+            fs.existsSync("src/__tests__/auth.test.ts") ||
+            fs.existsSync("tests/auth.test.ts")
           );
-
-          return testDirs.some((dir) => {
-            const authTestFile = path.join(dir, "auth.test.ts");
-            return fs.existsSync(authTestFile) || fs.existsSync(authTestFile.replace(".ts", ".js"));
-          });
         },
       },
     ],
@@ -318,98 +417,219 @@ export const plan = [
 ];
 ```
 
-## Precondition Types
+## Check Type Patterns
 
-### 1. File Existence Checks
+### Precondition Patterns
+
+Use these for things that must be true **before** starting:
 
 ```typescript
+// File doesn't exist yet (we're about to create it)
+{ description: "OAuthService doesn't exist yet", check: () => !fs.existsSync("src/services/OAuthService.ts") }
+
+// No conflicts with existing code
+{ description: "No OAuth routes defined", check: () => !fs.readFileSync("src/routes/auth.ts", "utf-8").includes("/oauth") }
+
+// Dependencies are in place
+{ description: "Express is installed", check: () => JSON.parse(fs.readFileSync("package.json", "utf-8")).dependencies?.express }
+```
+
+### Postcondition Patterns
+
+Use these for things that must be true **after** implementation:
+
+```typescript
+// File was created
+{ description: "OAuthService exists", check: () => fs.existsSync("src/services/OAuthService.ts") }
+
+// Expected exports are present
+{ description: "OAuthService exports authenticate", check: () => fs.readFileSync("src/services/OAuthService.ts", "utf-8").includes("export") && fs.readFileSync("src/services/OAuthService.ts", "utf-8").includes("authenticate") }
+
+// Integration was completed
+{ description: "Routes import OAuthService", check: () => fs.readFileSync("src/routes/auth.ts", "utf-8").includes("OAuthService") }
+
+// Configuration was added
+{ description: "OAuth env vars documented", check: () => fs.readFileSync(".env.example", "utf-8").includes("OAUTH_CLIENT_ID") }
+```
+
+### Invariant Patterns
+
+Use these for things that must remain true **throughout**:
+
+```typescript
+// Existing files untouched
+{ description: "AuthService still exists", check: () => fs.existsSync("src/services/AuthService.ts") }
+
+// Existing exports preserved
+{ description: "AuthService still exports authenticate", check: () => fs.readFileSync("src/services/AuthService.ts", "utf-8").includes("authenticate") }
+
+// Architectural patterns maintained
+{ description: "Router pattern preserved", check: () => fs.readFileSync("src/routes/auth.ts", "utf-8").includes("Router()") }
+
+// Tests still present
+{ description: "Auth tests exist", check: () => fs.existsSync("src/__tests__/auth.test.ts") }
+```
+
+## Test Postconditions (Required)
+
+**Tests are not optional.** Every plan step that creates functionality MUST include test postconditions.
+
+### Why Tests Are Postconditions
+
+- **Structural postconditions** verify files exist with expected exports
+- **Test postconditions** verify the code actually works
+- Without test postconditions, `--phase=post` only confirms structure, not behavior
+
+### Test Postcondition Patterns
+
+```typescript
+import { execSync } from "child_process";
+
+// 1. Test file exists
 {
-  description: "Target file exists",
-  check: () => fs.existsSync("path/to/file.ts")
+  description: "Unit tests exist for OAuthService",
+  check: () => fs.existsSync("src/__tests__/OAuthService.test.ts"),
+}
+
+// 2. Tests pass (runs actual tests)
+{
+  description: "OAuthService tests pass",
+  check: () => {
+    try {
+      execSync("npm test -- --run src/__tests__/OAuthService.test.ts", {
+        stdio: "pipe",
+        timeout: 60000,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+}
+
+// 3. All tests pass (for final verification)
+{
+  description: "All tests pass",
+  check: () => {
+    try {
+      execSync("npm test -- --run", { stdio: "pipe", timeout: 120000 });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+}
+
+// 4. Coverage threshold (optional but recommended)
+{
+  description: "Test coverage above 80%",
+  check: () => {
+    try {
+      const result = execSync("npm test -- --coverage --run", {
+        encoding: "utf-8",
+        stdio: "pipe",
+      });
+      // Parse coverage output for threshold
+      const coverageMatch = result.match(/All files\s+\|\s+([\d.]+)/);
+      return coverageMatch && parseFloat(coverageMatch[1]) >= 80;
+    } catch {
+      return false;
+    }
+  },
 }
 ```
 
-### 2. Content Pattern Checks
+### Required Test Postconditions by Component Type
+
+| Component Type | Required Postconditions |
+|----------------|------------------------|
+| Pure functions (validators, utils) | Test file exists + tests pass |
+| Services with side effects | Test file exists + tests pass + integration test exists |
+| API routes/endpoints | Integration test exists + tests pass |
+| Main entry point | Smoke test passes |
+
+### Complete Example with Test Postconditions
 
 ```typescript
 {
-  description: "File exports expected function",
-  check: () => {
-    const content = fs.readFileSync("src/service.ts", "utf-8");
-    return content.includes("export") && content.includes("functionName");
-  }
-}
-```
+  name: "Create OAuthService",
+  preconditions: [
+    { description: "src/services exists", check: () => fs.existsSync("src/services") },
+    { description: "OAuthService doesn't exist", check: () => !fs.existsSync("src/services/OAuthService.ts") },
+  ],
+  postconditions: [
+    // Structural
+    { description: "OAuthService file exists", check: () => fs.existsSync("src/services/OAuthService.ts") },
+    { description: "OAuthService exports authenticate", check: () => {
+      const content = fs.readFileSync("src/services/OAuthService.ts", "utf-8");
+      return content.includes("export") && content.includes("authenticate");
+    }},
 
-### 3. No Conflict Checks
-
-```typescript
-{
-  description: "Feature not already implemented",
-  check: () => {
-    const content = fs.readFileSync("src/features.ts", "utf-8");
-    return !content.toLowerCase().includes("oauth");
-  }
-}
-```
-
-### 4. Dependency Checks
-
-```typescript
-{
-  description: "Required package is installed",
-  check: () => {
-    const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
-    return pkg.dependencies?.["package-name"] || pkg.devDependencies?.["package-name"];
-  }
-}
-```
-
-### 5. Configuration Checks
-
-```typescript
-{
-  description: "Environment variable template exists",
-  check: () => {
-    if (!fs.existsSync(".env.example")) return false;
-    const env = fs.readFileSync(".env.example", "utf-8");
-    return env.includes("JWT_SECRET");
-  }
+    // TESTS - REQUIRED
+    { description: "OAuthService test file exists", check: () => fs.existsSync("src/__tests__/OAuthService.test.ts") },
+    { description: "OAuthService tests pass", check: () => {
+      try {
+        execSync("npm test -- --run src/__tests__/OAuthService.test.ts", { stdio: "pipe" });
+        return true;
+      } catch { return false; }
+    }},
+  ],
+  invariants: [
+    { description: "Existing auth tests still pass", check: () => {
+      try {
+        execSync("npm test -- --run src/__tests__/auth.test.ts", { stdio: "pipe" });
+        return true;
+      } catch { return false; }
+    }},
+  ],
 }
 ```
 
 ## Running Planning Verification
 
-Run feature-specific verification directly:
+Run feature-specific verification with phase flag:
 ```bash
-npx tsx planning/oauth-authentication.ts
-npx tsx planning/fix-cart-calculation.ts
-# or
-node planning/oauth-authentication.js
-python planning/oauth_authentication.py
+# Before implementation
+npx tsx planning/oauth-authentication.ts --phase=pre
+
+# After implementation
+npx tsx planning/oauth-authentication.ts --phase=post
 ```
 
-Or add convenience scripts for frequently-run verifications:
+Or add convenience scripts:
 ```json
 {
   "scripts": {
-    "plan:oauth": "tsx planning/oauth-authentication.ts",
-    "plan:cart-fix": "tsx planning/fix-cart-calculation.ts"
+    "plan:oauth:pre": "tsx planning/oauth-authentication.ts --phase=pre",
+    "plan:oauth:post": "tsx planning/oauth-authentication.ts --phase=post"
   }
 }
 ```
 
-## When to Move to Implementation
+## Workflow
+
+### Before Implementation
 
 Only start implementing when:
-1. ✅ All plan steps show "READY"
-2. ✅ No preconditions are failing
+1. ✅ All preconditions pass (`--phase=pre`)
+2. ✅ All invariants pass
 3. ✅ You understand what each step will do
 
-If preconditions fail:
+If pre-checks fail:
 - **File missing?** Create the file or adjust your plan
-- **Function doesn't exist?** Add it first or update approach
 - **Conflict detected?** Resolve the conflict or revise strategy
+- **Dependency missing?** Install it first
+
+### After Implementation
+
+Verify completion:
+1. ✅ All postconditions pass (`--phase=post`)
+2. ✅ All invariants still pass (nothing broken)
+
+If post-checks fail:
+- **Postcondition failed?** Implementation is incomplete
+- **Invariant failed?** You broke something that should have been preserved
+- **Some pass, some fail?** Partial implementation - continue or rollback
 
 ## Handling Blocked Steps
 
@@ -436,50 +656,49 @@ if (!requiredFile.exists()) {
 ## Example: Handling Dependencies Between Steps
 
 ```typescript
-export const plan = [
+export const plan: PlanStep[] = [
   {
     name: "Update Prisma schema",
     preconditions: [
-      {
-        description: "Prisma schema exists",
-        check: () => fs.existsSync("prisma/schema.prisma"),
-      },
+      { description: "Prisma schema exists", check: () => fs.existsSync("prisma/schema.prisma") },
+      { description: "OAuth fields not present", check: () => !fs.readFileSync("prisma/schema.prisma", "utf-8").includes("oauthProvider") },
+    ],
+    postconditions: [
+      { description: "OAuth fields added", check: () => fs.readFileSync("prisma/schema.prisma", "utf-8").includes("oauthProvider") },
+    ],
+    invariants: [
+      { description: "User model exists", check: () => fs.readFileSync("prisma/schema.prisma", "utf-8").includes("model User") },
     ],
   },
 
   {
     name: "Generate Prisma client",
     preconditions: [
-      {
-        description: "Schema was updated with new fields",
-        check: () => {
-          const schema = fs.readFileSync("prisma/schema.prisma", "utf-8");
-          return schema.includes("oauthProvider") && schema.includes("oauthId");
-        },
-      },
+      { description: "Schema has OAuth fields", check: () => fs.readFileSync("prisma/schema.prisma", "utf-8").includes("oauthProvider") },
     ],
+    postconditions: [
+      { description: "Client types include OAuth fields", check: () => {
+        const clientTypes = "node_modules/.prisma/client/index.d.ts";
+        return fs.existsSync(clientTypes) && fs.readFileSync(clientTypes, "utf-8").includes("oauthProvider");
+      }},
+    ],
+    invariants: [],
   },
 
   {
     name: "Use new fields in code",
     preconditions: [
-      {
-        description: "Prisma client types include new fields",
-        check: () => {
-          // This will only pass after prisma generate runs
-          const clientTypes = "node_modules/.prisma/client/index.d.ts";
-          if (!fs.existsSync(clientTypes)) return false;
-
-          const types = fs.readFileSync(clientTypes, "utf-8");
-          return types.includes("oauthProvider");
-        },
-      },
+      { description: "Client types ready", check: () => fs.existsSync("node_modules/.prisma/client/index.d.ts") },
     ],
+    postconditions: [
+      { description: "OAuthService uses oauthProvider field", check: () => fs.readFileSync("src/services/OAuthService.ts", "utf-8").includes("oauthProvider") },
+    ],
+    invariants: [],
   },
 ];
 ```
 
-This shows **step dependencies** - each step's preconditions depend on the previous step completing.
+This shows **step dependencies** - each step's preconditions depend on the previous step's postconditions.
 
 ## Pro Tips
 

@@ -117,47 +117,86 @@ async function main() {
 main();
 ```
 
-## Phase 2: Planning with Precondition Checks
+## Phase 2: Planning with Pre/Post Condition Checks
 
-**Goal:** Validate that integration points exist and are ready for implementation.
+**Goal:** Validate that integration points exist, are ready for implementation, and define success criteria.
+
+### The Three Check Types
+
+| Check Type | When It Must Pass | Purpose |
+|------------|-------------------|---------|
+| **Preconditions** | Before implementation | "Ready to start?" |
+| **Postconditions** | After implementation | "Did it work?" |
+| **Invariants** | Both before AND after | "Did we break anything?" |
 
 ### Steps:
 
 1. **Break Down the Plan**
    - Identify discrete implementation steps
    - For each step, identify what must be true to proceed
+   - For each step, define what success looks like
 
-2. **Write Precondition Checks**
-   - Create `planning/preconditions.ts`
-   - Each plan step gets precondition checks
+2. **Write Verification Checks**
+   - Create `planning/<feature-name>.ts`
+   - Each plan step gets:
+     - **Preconditions**: What must be true before starting
+     - **Postconditions**: What must be true after completing
+     - **Invariants**: What must remain true throughout
    - Use deep verification where needed - don't artificially limit depth
    - Avoid duplicating verification already done in research phase
 
 3. **Validate Before Implementation**
-   - Run precondition checks
-   - All preconditions must pass before starting implementation
+   - Run with `--phase=pre`: All preconditions and invariants must pass
    - If blocked, resolve issues first
+
+4. **Validate After Implementation**
+   - Run with `--phase=post`: All postconditions and invariants must pass
+   - If failing, implementation is incomplete or broke something
 
 **See [planning-phase.md](planning-phase.md) for templates and examples.**
 
 ### Example Planning Output:
 
 ```typescript
-// planning/preconditions.ts
+// planning/oauth-authentication.ts
 import * as fs from "fs";
+
+type Check = { description: string; check: () => boolean };
 
 interface PlanStep {
   name: string;
-  preconditions: Array<{
-    description: string;
-    check: () => boolean;
-  }>;
+  preconditions: Check[];   // Must pass BEFORE implementation
+  postconditions: Check[];  // Must pass AFTER implementation
+  invariants: Check[];      // Must pass BOTH before AND after
 }
 
 export const plan: PlanStep[] = [
   {
     name: "Add OAuth2 provider support",
     preconditions: [
+      {
+        description: "No existing OAuth implementation",
+        check: () => !fs.existsSync("src/services/OAuthService.ts"),
+      },
+    ],
+    postconditions: [
+      {
+        description: "OAuthService exists and exports provider",
+        check: () => {
+          if (!fs.existsSync("src/services/OAuthService.ts")) return false;
+          const content = fs.readFileSync("src/services/OAuthService.ts", "utf-8");
+          return content.includes("export") && content.includes("OAuthProvider");
+        },
+      },
+      {
+        description: "AuthService integrates with OAuthService",
+        check: () => {
+          const content = fs.readFileSync("src/services/AuthService.ts", "utf-8");
+          return content.includes("OAuthService") || content.includes("oauth");
+        },
+      },
+    ],
+    invariants: [
       {
         description: "AuthService exports authenticate method",
         check: () => {
@@ -166,34 +205,72 @@ export const plan: PlanStep[] = [
         },
       },
       {
-        description: "No existing OAuth implementation",
-        check: () => {
-          return (
-            !fs.existsSync("src/services/OAuthService.ts") &&
-            !fs.readFileSync("src/services/AuthService.ts", "utf-8").toLowerCase().includes("oauth")
-          );
-        },
+        description: "Existing auth tests still pass structure check",
+        check: () => fs.existsSync("src/__tests__/auth.test.ts"),
       },
     ],
   },
   // More steps...
 ];
 
+// Run with: npx tsx planning/oauth-authentication.ts --phase=pre
+// Run with: npx tsx planning/oauth-authentication.ts --phase=post
+const phase = process.argv.includes("--phase=post") ? "post" : "pre";
+
 for (const step of plan) {
-  const passed = step.preconditions.every((p) => p.check());
-  console.log(`[${passed ? "READY" : "BLOCKED"}] ${step.name}`);
+  const checks = phase === "pre"
+    ? [...step.preconditions, ...step.invariants]
+    : [...step.postconditions, ...step.invariants];
+
+  const passed = checks.every((c) => c.check());
+  console.log(`[${passed ? "✓" : "✗"}] ${step.name}`);
 
   if (!passed) {
-    step.preconditions.filter((p) => !p.check()).forEach((p) => console.log(`    ✗ ${p.description}`));
+    checks.filter((c) => !c.check()).forEach((c) => console.log(`    ✗ ${c.description}`));
   }
 }
 ```
 
-## Phase 3: Implementation with Standard Tests
+## Phase 3: Implementation with Test Verification
 
 **Goal:** Write code and verify it works through standard testing.
 
-By this phase, the deep verification work is done. Now it's just normal software development with tests.
+By this phase, the deep verification work is done. Now implement and verify through tests.
+
+### Critical Requirement: Tests Are Postconditions
+
+**Tests are not optional.** They are postconditions that must pass for implementation to be complete.
+
+Your planning postconditions MUST include test verification:
+
+```typescript
+// planning/<feature>.ts - REQUIRED postconditions for every step
+{
+  name: "Create UserService",
+  postconditions: [
+    // Structural postconditions
+    { description: "UserService file exists", check: () => fs.existsSync("src/services/UserService.ts") },
+
+    // TEST POSTCONDITIONS - REQUIRED
+    { description: "Unit tests exist", check: () => fs.existsSync("src/__tests__/UserService.test.ts") },
+    { description: "Tests pass", check: () => {
+      try {
+        execSync("npm test -- --run src/__tests__/UserService.test.ts", { stdio: "pipe" });
+        return true;
+      } catch { return false; }
+    }},
+  ],
+}
+```
+
+### Test Requirements by Component Type
+
+| Component Type | Required Tests | Example |
+|----------------|----------------|---------|
+| Pure functions | Unit tests | Validators, formatters, utilities |
+| Services with side effects | Unit + Integration tests | Database, API, auth services |
+| API routes/endpoints | Integration tests | HTTP handlers, middleware |
+| Main entry point | Smoke test | App starts without error |
 
 ### Steps:
 
@@ -201,16 +278,17 @@ By this phase, the deep verification work is done. Now it's just normal software
    - Follow the validated plan from phase 2
    - Write clean, maintainable code
 
-2. **Write Tests**
+2. **Write Tests (Not Optional)**
    - Unit tests for individual functions
    - Integration tests for workflows
    - Use existing test frameworks (vitest, jest, pytest, etc.)
 
-3. **Run and Verify**
-   - All tests must pass
-   - Code must satisfy original requirements
+3. **Run Post-Implementation Verification**
+   - Run `npx tsx planning/<feature>.ts --phase=post`
+   - All postconditions must pass, INCLUDING test postconditions
+   - If tests fail, implementation is incomplete
 
-**See [implementation-phase.md](implementation-phase.md) for best practices.**
+**See [implementation-phase.md](implementation-phase.md) for testing patterns.**
 
 ## Benefits of This Approach
 
@@ -252,9 +330,10 @@ When using this skill, follow this pattern:
 
 2. **Move to Planning**
    - Create `planning/` directory (if it doesn't exist)
-   - Write feature-specific preconditions: `planning/<feature-name>.ts`
-   - Run checks: `npx tsx planning/<feature-name>.ts`
-   - Only proceed if all steps are "READY"
+   - Write feature-specific checks: `planning/<feature-name>.ts`
+   - Include preconditions, postconditions, and invariants
+   - Run pre-checks: `npx tsx planning/<feature-name>.ts --phase=pre`
+   - Only proceed if all preconditions and invariants pass
 
 3. **Implement and Test**
    - Write implementation code
@@ -262,10 +341,15 @@ When using this skill, follow this pattern:
    - Run tests: `npm test` or equivalent
    - Verify all tests pass
 
-4. **Keep Verification Code**
+4. **Validate Completion**
+   - Run post-checks: `npx tsx planning/<feature-name>.ts --phase=post`
+   - All postconditions and invariants must pass
+   - If failing, implementation is incomplete
+
+5. **Keep Verification Code**
    - Commit research and planning verification to git
    - Artifacts accumulate over time as project documentation
-   - Re-run relevant scripts when revisiting features
+   - Re-run postconditions + invariants when revisiting features
    - New team members can run scripts to understand architecture
 
 ## Naming Convention

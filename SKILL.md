@@ -1,42 +1,74 @@
 ---
 name: verifying-assumptions
-description: Write and run verification scripts before and after every code change. Triggers on all code tasks. When you think "I assume X is true" or "this should work," stop and write a script to prove it. Verification = executable script, not mental checking.
+description: Write verification scripts to FILES and execute them before and after every code change. Never run verification logic inline. When you think "I assume X is true," stop and write a script file to prove it. Verification = script file on disk, not inline bash.
 ---
 
 # Executable Verification
 
-**Core rule: Every assumption must be verified by writing and running a script.**
+**Core rule: Every assumption must be verified by writing a script file and executing it.**
 
 ## The Pattern
 
 ```
-1. Identify assumption → 2. Write script → 3. Run script → 4. Act on result
+1. Identify assumption → 2. Write script FILE → 3. Execute file → 4. Act on result
 ```
 
-**Minimum per task:** Write and run at least one precondition script (before acting) AND one postcondition script (after acting).
+**Critical:** "Write a script" means creating an actual file on disk, then running that file. Never execute verification logic inline.
+
+**Minimum per task:** Write and run at least one precondition script file (before acting) AND one postcondition script file (after acting).
 
 ## Script Examples
 
-```bash
-# File exists?
-[[ -f "src/config/database.ts" ]] && echo "PASS: config exists" || { echo "FAIL: config not found"; exit 1; }
+**Correct workflow:** Write file → Execute file
 
-# Pattern in codebase?
+```bash
+# 1. Write the script to a file
+cat > verification/check-config.sh << 'EOF'
+#!/bin/bash
+[[ -f "src/config/database.ts" ]] && echo "PASS: config exists" || { echo "FAIL: config not found"; exit 1; }
+EOF
+
+# 2. Make executable and run
+chmod +x verification/check-config.sh
+./verification/check-config.sh
+```
+
+**More script content patterns:**
+
+```bash
+# Pattern in codebase
 grep -rq "useAuth" src/hooks/ && echo "PASS: useAuth hook exists" || { echo "FAIL: useAuth not found"; exit 1; }
 
-# Tests pass?
+# Tests pass
 npm test -- --testPathPattern="auth" && echo "PASS: auth tests pass" || { echo "FAIL: auth tests failed"; exit 1; }
 ```
 
 See `templates/` for more patterns: API health checks, dependency verification, TypeScript AST analysis, Python DB schema checks, ephemeral session setup.
 
+## Anti-Pattern: Inline Execution
+
+**WRONG** - Running verification logic directly in bash:
+```bash
+# DON'T do this - no script file created
+[[ -f "src/config.ts" ]] && echo "exists"
+grep -q "pattern" file.ts
+```
+
+**RIGHT** - Always create a file first:
+```bash
+# DO this - write to file, then execute
+Write verification/check-config.sh with script content
+bash verification/check-config.sh
+```
+
 ## Script Requirements
 
 All verification scripts must:
-1. Output `PASS:` or `FAIL:` with a description
-2. Exit 0 on success, exit 1 on failure
-3. Run from project root
-4. Be self-contained (no external config)
+1. **Be written to a file** before execution (never inline)
+2. Output `PASS:` or `FAIL:` with a description
+3. Exit 0 on success, exit 1 on failure
+4. Run from project root
+5. Be self-contained (no external config)
 
 ## When to Write Scripts
 
@@ -60,16 +92,16 @@ For each action:
 ```
 BEFORE ACTING:
 1. What am I assuming?
-2. Write verification script(s)
-3. Run script(s)
+2. Write verification script to FILE (e.g., verification/pre-check.sh)
+3. Execute the file
 4. If FAIL: STOP, do not proceed
 
 TAKE ACTION
 
 AFTER ACTING:
 1. What should now be true?
-2. Write postcondition script(s)
-3. Run script(s)
+2. Write postcondition script to FILE (e.g., verification/post-check.sh)
+3. Execute the file
 4. If FAIL: diagnose and fix
 ```
 
@@ -84,21 +116,29 @@ verification/
 └── postconditions/   # "Did X work?"
 ```
 
-For runtime/session-specific checks (ports, services), use ephemeral scripts:
+For runtime/session-specific checks (ports, services), write scripts to a temp directory:
 
 ```bash
+# Set up session directory
 export VERIFY_SESSION="/tmp/verify-$(date +%s)"
 mkdir -p "$VERIFY_SESSION"
+
+# Write script to file, then execute
+cat > "$VERIFY_SESSION/check-port.sh" << 'EOF'
+#!/bin/bash
+nc -z localhost 3000 && echo "PASS: port 3000 open" || { echo "FAIL: port 3000 closed"; exit 1; }
+EOF
+bash "$VERIFY_SESSION/check-port.sh"
 ```
 
 ## Multi-Step Tasks
 
-Never chain actions without intermediate verification:
+Never chain actions without intermediate verification scripts:
 
 ```
-Step 1: [verify preconditions] → act → [verify postconditions]
-                                              ↓
-Step 2: [verify preconditions] → act → [verify postconditions]
+Step 1: [write & run pre-script] → act → [write & run post-script]
+                                                    ↓
+Step 2: [write & run pre-script] → act → [write & run post-script]
 ```
 
-Each step's postconditions become the next step's preconditions. Verify them with scripts.
+Each step's postconditions become the next step's preconditions. Verify them with script files, not inline commands.

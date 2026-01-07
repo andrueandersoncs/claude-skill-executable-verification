@@ -198,6 +198,86 @@ Name scripts after **what they verify**, not when they run:
 - `auth-uses-jwt.ts` - verifies JWT is the auth mechanism
 - `prisma-schema-valid.sh` - verifies Prisma schema is valid
 
+## Ephemeral Verification
+
+Some assumptions are only valid for the current moment—services running, ports available, connections alive. These use a temporary session directory.
+
+### Session Setup
+
+Claude creates this once per conversation:
+
+```bash
+export VERIFY_SESSION="/tmp/verify-$(date +%s)"
+mkdir -p "$VERIFY_SESSION"
+# Creates run-all.sh entry point automatically
+```
+
+### Example: Deploying a Feature
+
+**User:** "Deploy the new user service"
+
+**Claude's internal process:**
+
+> Before deploying, I need to verify:
+> 1. Database is accessible
+> 2. Port 8080 is available
+> 3. Required services are running
+>
+> These are ephemeral—they could change any moment.
+
+**Claude creates ephemeral checks:**
+
+```bash
+#!/bin/bash
+# $VERIFY_SESSION/db-alive.sh
+pg_isready -h localhost -q && echo "PASS: DB ready" || { echo "FAIL: DB down"; exit 1; }
+```
+
+```bash
+#!/bin/bash
+# $VERIFY_SESSION/port-free.sh
+! nc -z localhost 8080 2>/dev/null && echo "PASS: Port 8080 free" || { echo "FAIL: Port in use"; exit 1; }
+```
+
+```bash
+#!/bin/bash
+# $VERIFY_SESSION/auth-service.sh
+curl -sf http://localhost:3001/health > /dev/null && echo "PASS: Auth service up" || { echo "FAIL: Auth down"; exit 1; }
+```
+
+**Run all before proceeding:**
+
+```bash
+$VERIFY_SESSION/run-all.sh
+```
+
+**Output:**
+```
+=== db-alive.sh ===
+PASS: DB ready
+
+=== port-free.sh ===
+PASS: Port 8080 free
+
+=== auth-service.sh ===
+PASS: Auth service up
+
+=== Summary: 3 scripts ===
+All checks passed
+```
+
+### When to Use Ephemeral vs Persistent
+
+| Ephemeral | Persistent |
+|-----------|------------|
+| Is the server running? | Where are routes located? |
+| Is this port free? | What auth mechanism is used? |
+| Is the connection alive? | Does this API support streaming? |
+| Is the lock released? | What's the schema structure? |
+| Is the token still valid? | What patterns does the codebase use? |
+
+**Rule of thumb:** If re-running the check tomorrow would give a different answer, it's ephemeral.
+
 ## Accumulated Value
 
 Verification scripts become project artifacts:
@@ -297,6 +377,7 @@ python3 verification/assumptions/check.py
 1. Claude automatically recognizes risky assumptions
 2. Creates verification scripts to prove/disprove them
 3. Runs scripts and incorporates findings
-4. Stores scripts in `verification/` for reuse
+4. **Persistent** scripts go in `verification/` for reuse
+5. **Ephemeral** scripts go in `$VERIFY_SESSION/` for runtime checks
 
 The goal: **"I confirmed X"** instead of **"I think X"**

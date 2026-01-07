@@ -1,438 +1,302 @@
-# Executable Verification - Usage Guide
+# Usage Guide
 
-This guide shows you how to use the Executable Verification skill in practice.
+## How It Works
 
-## Quick Setup (Recommended)
+Executable Verification teaches Claude to recognize when it's making assumptions and to verify them before acting.
 
-Run the initialization script to set up verification in your project:
+The skill activates automatically. You don't need to do anything special - just use Claude Code normally. When Claude catches itself making a risky assumption, it will pause and verify.
 
-```bash
-.claude/skills/executable-verification/scripts/init-verification.sh
-```
+## The Verification Loop
 
-This will:
-- ✅ Create `research/` and `planning/` directories
-- ✅ Copy appropriate templates based on your project type
-- ✅ Add verification scripts to `package.json`
-- ✅ Install required dependencies (`ts-morph`, `tsx`)
-- ✅ Update `.gitignore`
+1. **Recognize** - Claude notices it's about to act on an assumption
+2. **Assess** - Is this assumption high-risk? Could it be wrong?
+3. **Write** - Create a verification script
+4. **Run** - Execute the script
+5. **Proceed or Pivot** - If verified, continue. If not, update understanding.
 
-## Manual Setup
+## What Gets Verified
 
-If you prefer manual setup:
+Claude verifies assumptions that are likely to be wrong:
 
-### 1. Create Directories
+| Category | Example Assumption | Why Verify |
+|----------|-------------------|------------|
+| File structure | "Routes are in `src/routes/`" | Every project is different |
+| API signatures | "This function takes options as second arg" | APIs change between versions |
+| Dependencies | "Prisma auto-generates types" | Behavior varies by config |
+| Patterns | "Errors are handled in middleware" | Codebases are inconsistent |
+| Config formats | "Env vars use `NEXT_PUBLIC_` prefix" | Conventions differ |
+| External APIs | "The endpoint returns `{ data: [...] }`" | APIs evolve |
 
-```bash
-mkdir -p research planning
-```
+## Example Session
 
-### 2. Copy Templates
+**User:** "Add a user preferences endpoint"
 
-Copy templates and rename for your feature/bug:
+**Claude's internal process:**
 
-For TypeScript projects:
-```bash
-cp .claude/skills/executable-verification/templates/research-typescript.ts research/my-feature.ts
-cp .claude/skills/executable-verification/templates/planning-template.ts planning/my-feature.ts
-```
+> I'll add this to `src/routes/`...
+>
+> Wait - I'm assuming:
+> 1. Routes live in `src/routes/`
+> 2. There's a consistent pattern to follow
+>
+> Let me verify.
 
-For JavaScript projects:
-```bash
-cp .claude/skills/executable-verification/templates/research-javascript.js research/my-feature.js
-cp .claude/skills/executable-verification/templates/planning-template.ts planning/my-feature.ts
-```
-
-Name files after the feature or bug you're working on (e.g., `oauth-authentication.ts`, `fix-session-bug.ts`).
-
-### 3. Install Dependencies
+**Claude creates:**
 
 ```bash
-npm install -D ts-morph tsx
-```
+#!/bin/bash
+# verification/assumptions/route-structure.sh
 
-### 4. Run Verification Scripts
+if [[ ! -d "src/routes" ]]; then
+    echo "FAIL: src/routes/ does not exist"
+    echo "Searching for route files..."
+    find . -type f -name "*route*" | grep -v node_modules
+    exit 1
+fi
 
-Run feature-specific scripts directly:
-```bash
-npx tsx research/oauth-authentication.ts
-npx tsx planning/oauth-authentication.ts
-```
-
-Optionally add convenience scripts to `package.json` for frequently-run verifications:
-```json
-{
-  "scripts": {
-    "verify:oauth": "tsx research/oauth-authentication.ts && tsx planning/oauth-authentication.ts"
-  }
-}
-```
-
-## Using the Skill
-
-### Automatic Activation
-
-Claude Code will automatically use this skill when you:
-- Ask to implement a complex feature
-- Request help with refactoring
-- Work with unfamiliar code
-- Start multi-file architectural changes
-
-**Example prompts that trigger the skill:**
-```
-"Implement OAuth authentication for the app"
-"Refactor the authentication system to support multiple providers"
-"Add real-time notifications using WebSockets"
-```
-
-### Manual Activation
-
-Explicitly request the skill:
-```
-"Use executable verification to implement user roles and permissions"
-```
-
-## Workflow Example
-
-Let's walk through implementing a new feature using executable verification.
-
-### Task: "Add OAuth Authentication"
-
-#### Phase 1: Research
-
-Claude will create `research/oauth-authentication.ts`:
-
-```typescript
-export const assumptions = [
-  {
-    claim: "Authentication uses JWT tokens",
-    verify: async () => {
-      const authFiles = project.getSourceFiles("**/auth/**/*.ts");
-      return authFiles.some(f => f.getText().includes("jsonwebtoken"));
-    }
-  },
-  {
-    claim: "User model has email field",
-    verify: async () => {
-      const userModel = project.getSourceFile("**/models/User.ts");
-      return userModel?.getText().includes("email") ?? false;
-    }
-  },
-  // More assumptions...
-];
-```
-
-**Run verification:**
-```bash
-npx tsx research/oauth-authentication.ts
+echo "PASS: src/routes/ exists"
+echo "Files:"
+ls src/routes/
 ```
 
 **Output:**
 ```
-🔍 Verifying Research Assumptions
-
-✅ Authentication uses JWT tokens
-✅ User model has email field
-✅ Services use dependency injection
-✅ OAuth not already implemented
-
-✅ All assumptions verified!
+PASS: src/routes/ exists
+Files:
+auth.ts
+users.ts
+products.ts
 ```
 
-#### Phase 2: Planning
+Now Claude knows where to put the route and can look at existing files to match the pattern.
 
-Claude creates `planning/oauth-authentication.ts`:
+## Verification Script Types
 
-```typescript
-export const plan = [
-  {
-    name: "Create OAuthService",
-    preconditions: [
-      {
-        description: "src/services directory exists",
-        check: () => fs.existsSync("src/services")
-      },
-      {
-        description: "OAuthService doesn't exist yet",
-        check: () => !fs.existsSync("src/services/OAuthService.ts")
-      }
-    ]
-  },
-  // More steps...
-];
-```
+### Bash Scripts (Universal)
 
-**Run verification:**
+Best for: file checks, pattern searches, command output, version checks
+
 ```bash
-npx tsx planning/oauth-authentication.ts
+#!/bin/bash
+# verification/assumptions/uses-typescript.sh
+
+if [[ -f "tsconfig.json" ]]; then
+    echo "PASS: TypeScript project (tsconfig.json exists)"
+else
+    echo "FAIL: No tsconfig.json found"
+    exit 1
+fi
 ```
 
-**Output:**
-```
-📋 Validating Implementation Plan
-
-✅ READY  Create OAuthService
-✅ READY  Add OAuth routes
-✅ READY  Update User model
-❌ BLOCKED Run database migration
-    ❌ Prisma schema not updated yet
-
-Some steps are blocked.
-```
-
-Fix the blocker (update schema), then re-run until all steps are READY.
-
-#### Phase 3: Implementation
-
-Claude writes the code and tests:
-
-```typescript
-// src/services/OAuthService.ts
-export class OAuthService {
-  async authenticate(provider: string, code: string) {
-    // Implementation...
-  }
-}
-
-// src/__tests__/OAuthService.test.ts
-describe("OAuthService", () => {
-  it("authenticates via Google", async () => {
-    const result = await service.authenticate("google", "code");
-    expect(result.success).toBe(true);
-  });
-});
-```
-
-**Run tests:**
 ```bash
-npm test
+#!/bin/bash
+# verification/assumptions/prisma-schema-has-user.sh
+
+if grep -q "model User" prisma/schema.prisma 2>/dev/null; then
+    echo "PASS: User model exists in Prisma schema"
+    grep -A 10 "model User" prisma/schema.prisma
+else
+    echo "FAIL: No User model in Prisma schema"
+    exit 1
+fi
 ```
 
-**Output:**
-```
-✅ All tests passed!
-```
+### TypeScript/Bun Scripts
 
-## Customizing Verification
-
-### Research Phase Customization
-
-Edit your feature-specific research file (e.g., `research/oauth-authentication.ts`) to add assumptions:
+Best for: AST analysis, type checking, complex logic, API probing
 
 ```typescript
-{
-  claim: "Your specific claim about the codebase",
-  verify: async () => {
-    // Your verification logic
-    const files = project.getSourceFiles("**/your-pattern/**/*.ts");
-    // Analyze, check conditions, return true/false
-    return someCondition;
+#!/usr/bin/env bun
+// verification/assumptions/auth-middleware-exists.ts
+
+import { existsSync, readFileSync } from "fs";
+
+const middlewarePath = "src/middleware/auth.ts";
+
+if (!existsSync(middlewarePath)) {
+  console.log("FAIL: Auth middleware not found at", middlewarePath);
+  process.exit(1);
+}
+
+const content = readFileSync(middlewarePath, "utf-8");
+if (!content.includes("export")) {
+  console.log("FAIL: Auth middleware exists but has no exports");
+  process.exit(1);
+}
+
+console.log("PASS: Auth middleware exists and exports");
+```
+
+```typescript
+#!/usr/bin/env bun
+// verification/assumptions/api-health-check.ts
+
+const API = process.env.API_URL || "http://localhost:3000";
+
+try {
+  const res = await fetch(`${API}/health`);
+  if (!res.ok) {
+    console.log("FAIL: Health check returned", res.status);
+    process.exit(1);
   }
+  console.log("PASS: API is healthy");
+} catch (e) {
+  console.log("FAIL: Could not reach API at", API);
+  process.exit(1);
 }
 ```
 
-**Tips:**
-- Focus on architectural patterns relevant to your task
-- Use AST parsing for deep analysis
-- Make claims specific and testable
-- Add helpful console.log for failed checks
+### Python Scripts
 
-### Planning Phase Customization
+Best for: data analysis, database checks, ML/data projects
 
-Edit your feature-specific planning file (e.g., `planning/oauth-authentication.ts`) to match your implementation plan:
+```python
+#!/usr/bin/env python3
+# verification/assumptions/db-has-users-table.py
 
-```typescript
-{
-  name: "Your implementation step",
-  description: "What this step accomplishes",
-  preconditions: [
-    {
-      description: "File or condition that must exist",
-      check: () => {
-        // Simple check (file exists, string contains, etc.)
-        return fs.existsSync("path") && condition;
-      }
-    }
-  ]
-}
+import sqlite3
+import sys
+
+try:
+    conn = sqlite3.connect("data/app.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+
+    if cursor.fetchone():
+        print("PASS: users table exists")
+    else:
+        print("FAIL: users table does not exist")
+        sys.exit(1)
+except Exception as e:
+    print(f"FAIL: Could not check database: {e}")
+    sys.exit(1)
 ```
 
-**Tips:**
-- Use deep verification where needed for new discoveries
-- Avoid duplicating what research already verified
-- Check for conflicts (feature already exists)
-- Order steps by dependencies
+## Script Organization
 
-## Verification in CI/CD
+Scripts go in `verification/` with subdirectories by purpose:
 
-Add verification to your CI pipeline:
+```
+verification/
+├── assumptions/       # Verify facts about the codebase
+│   ├── route-structure.sh
+│   ├── auth-uses-jwt.ts
+│   └── db-schema.py
+├── preconditions/     # Check if ready to do something
+│   ├── deps-installed.sh
+│   └── env-vars-set.sh
+└── postconditions/    # Check if something worked
+    ├── tests-pass.sh
+    └── build-succeeds.sh
+```
+
+### Naming Convention
+
+Name scripts after **what they verify**, not when they run:
+
+- `route-structure.sh` - verifies route file organization
+- `auth-uses-jwt.ts` - verifies JWT is the auth mechanism
+- `prisma-schema-valid.sh` - verifies Prisma schema is valid
+
+## Accumulated Value
+
+Verification scripts become project artifacts:
+
+### Re-run in Future Sessions
+
+```bash
+# New Claude session, same project
+./verification/assumptions/route-structure.sh
+# Confirms nothing changed
+```
+
+### Onboarding
+
+New team members can run verification scripts to understand the codebase:
+
+```bash
+# "How does auth work in this project?"
+./verification/assumptions/auth-uses-jwt.ts
+# Output explains the auth mechanism
+```
+
+### CI/CD Integration
+
+Add to your pipeline:
 
 ```yaml
 # .github/workflows/verify.yml
-name: Verify Assumptions
-
-on: [push, pull_request]
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-      - run: npm install
-      - run: npm run verify:all
+- name: Run verification checks
+  run: |
+    for script in verification/assumptions/*.sh; do
+      bash "$script" || exit 1
+    done
 ```
 
-This ensures assumptions remain valid as the codebase evolves.
+## When NOT to Verify
 
-## Keeping Verification Fresh
+Not everything needs a script. Skip verification when:
 
-### Recommended: Commit Feature-Specific Verification
+- The assumption is trivial (e.g., "JavaScript files end in .js")
+- You're about to look at the thing anyway (e.g., about to read a file)
+- The cost of being wrong is low (quick to fix)
+- You're in rapid prototyping mode
 
-With feature-specific naming, verification artifacts become valuable project documentation:
+The skill is about **reducing costly mistakes**, not about verifying everything.
 
+## Customizing Behavior
+
+The skill is designed to work automatically, but you can guide it:
+
+**Request verification:**
 ```
-research/
-├── oauth-authentication.ts     # Committed 3 months ago
-├── api-rate-limiting.ts        # Committed 2 months ago
-├── fix-session-timeout.ts      # Committed last week
-└── user-permissions.ts         # Current feature (WIP)
+"Verify your assumptions before making changes to the auth system"
 ```
 
-**Benefits:**
-- **Historical context**: See what was verified for past features
-- **Onboarding**: New team members run scripts to understand architecture
-- **Regression checking**: Re-run old verification when making related changes
-- **Resumable sessions**: Pick up where you left off in a new conversation
+**Skip verification:**
+```
+"Just make the change quickly, don't worry about verification"
+```
 
-**Maintenance:**
-- Delete scripts for abandoned features
-- Update scripts when significant architecture changes occur
-- Run old scripts periodically to catch drift
+**Run existing scripts:**
+```
+"Run the verification scripts to make sure nothing broke"
+```
 
 ## Troubleshooting
 
-### "Module not found: ts-morph"
+### Scripts Not Running
 
-Install dependencies:
+Make sure scripts are executable:
 ```bash
-npm install -D ts-morph tsx
+chmod +x verification/**/*.sh
 ```
 
-### "Cannot find tsconfig.json"
+### Wrong Working Directory
 
-Either:
-1. Create a `tsconfig.json` in your project root
-2. Or modify the template to add files manually:
-   ```typescript
-   const project = new Project({
-     skipAddingFilesFromTsConfig: true
-   });
-   project.addSourceFilesAtPaths("src/**/*.ts");
-   ```
-
-### "All assumptions failing"
-
-Check that:
-1. File paths match your project structure
-2. Pattern matching is correct for your codebase
-3. You're running from the project root directory
-
-### "Planning shows all blocked"
-
-This is normal if research hasn't been applied yet. The planning phase expects research to have informed some changes. Either:
-1. Run research first and apply learnings
-2. Update preconditions to match current state
-
-## Best Practices
-
-1. **Start with Research**
-   - Always run research verification first
-   - Don't proceed if assumptions fail
-   - Use research to inform your approach
-
-2. **Iterate on Planning**
-   - Planning may reveal missing preconditions
-   - Add steps as you discover dependencies
-   - Re-run after each change until all ready
-
-3. **Keep Verification Fast**
-   - Research should take seconds, not minutes
-   - Planning should be near-instant
-   - Slow verification won't get used
-
-4. **Make Failures Actionable**
-   - Add hints for fixing failed checks
-   - Log specific file paths and line numbers
-   - Suggest next steps
-
-5. **Commit When Valuable**
-   - Large features: commit verification
-   - Small changes: delete when done
-   - Shared projects: commit for team benefit
-
-## Advanced Usage
-
-### Pre-commit Hook
-
-Run verification before commits:
-
+Scripts assume they run from project root:
 ```bash
-# .husky/pre-commit
-npm run verify:all || exit 1
+cd /path/to/project
+./verification/assumptions/check.sh
 ```
 
-### Watch Mode
+### Missing Dependencies
 
-Re-run verification on file changes:
-
-```json
-{
-  "scripts": {
-    "verify:watch": "nodemon --exec 'npm run verify:all' --watch src"
-  }
-}
+For TypeScript scripts, ensure bun is installed:
+```bash
+curl -fsSL https://bun.sh/install | bash
 ```
 
-### Custom Reporters
-
-Format output for different tools:
-
-```typescript
-// research/assumptions.ts
-const jsonOutput = assumptions.map(a => ({
-  claim: a.claim,
-  passed: a.verify()
-}));
-
-console.log(JSON.stringify(jsonOutput, null, 2));
+For Python scripts, use the project's Python:
+```bash
+python3 verification/assumptions/check.py
 ```
-
-## Getting Help
-
-- **Documentation**: See `.claude/skills/executable-verification/*.md` files
-- **Templates**: Check `templates/` directory for examples
-- **Issues**: File issues in your project or ask Claude Code for help
 
 ## Summary
 
-```bash
-# Setup directories (one time)
-mkdir -p research planning
-npm install -D ts-morph tsx
+1. Claude automatically recognizes risky assumptions
+2. Creates verification scripts to prove/disprove them
+3. Runs scripts and incorporates findings
+4. Stores scripts in `verification/` for reuse
 
-# Research phase (feature-specific)
-npx tsx research/my-feature.ts
-
-# Planning phase (feature-specific)
-npx tsx planning/my-feature.ts
-
-# Implementation phase
-npm test
-```
-
-Name your verification scripts after the feature or bug (e.g., `oauth-authentication.ts`, `fix-cart-bug.ts`) to support multiple features and resumable sessions.
-
----
-
-**Remember:** Executable verification is about delegating inference from the agent to deterministic sources. Instead of the agent inferring facts and hoping they're correct, scripts interact with reality - AST parsers, web requests, user prompts, system state. When verification passes, you **know** (not just think) the facts are correct.
+The goal: **"I confirmed X"** instead of **"I think X"**

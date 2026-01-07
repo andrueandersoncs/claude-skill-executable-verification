@@ -1,258 +1,199 @@
 # Executable Verification Skill for Claude Code
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Claude Code](https://img.shields.io/badge/Claude-Code-blue.svg)](https://claude.com/claude-code)
+A Claude Code skill that teaches the agent to **recognize assumptions with high likelihood of being incorrect** and **generate verification scripts** to prove or disprove those assumptions before acting.
 
-An evolution of RPI (Research, Plan, Implement) where **each phase outputs runnable code that proves assumptions** instead of prose summaries.
+## The Problem
 
-## 🎯 What is Executable Verification?
+Claude makes assumptions constantly: about file locations, API signatures, configuration formats, existing patterns, dependency versions, how systems behave, what users mean. **Many failures stem not from lack of capability, but from incorrect assumptions.**
 
-Traditional RPI workflows have AI agents write markdown summaries at each phase:
-- Research: "The project uses Next.js" ← *Hope it's accurate*
-- Planning: "We'll add auth to the service layer" ← *Seems reasonable*
-- Implementation: Code (finally something verifiable!)
+When Claude says "I'll put this in `src/routes/`" or "This function takes a callback," it's making assumptions that may be wrong.
 
-**Executable Verification** improves this by making every phase produce executable code:
-- **Research**: Scripts that **prove** architectural patterns via AST analysis
-- **Planning**: Scripts that **validate** integration points are ready
-- **Implementation**: Standard tests that **verify** features work
+## The Solution
 
-### The Cumulative Principle
+Executable Verification teaches Claude a discipline:
 
-Each phase verifies what it needs - avoiding duplication, not depth:
+> When you recognize you're making an assumption that could be wrong, **write a script to verify it** before proceeding.
 
-| Phase | Focus | Verification |
-|-------|-------|--------------|
-| Research | Codebase assumptions | AST, web scraping, user prompts, system state |
-| Planning | Preconditions for steps | New integration points (can be deep if needed) |
-| Implementation | Behavior | Standard tests |
+This shifts from "I think X is true" to "I confirmed X is true."
 
-## ✨ Features
+## What It Looks Like
 
-- 🔍 **Deep Research Verification** - AST parsing, web scraping, user prompts, system state
-- ✅ **Planning Precondition Checks** - Verify integration points, avoid duplicating research
-- 🧪 **Standard Implementation Tests** - Unit/integration testing patterns
-- 📚 **Comprehensive Documentation** - Detailed guides for each phase
-- 🎨 **Ready-to-Use Templates** - TypeScript, JavaScript, and planning templates
-- 🚀 **One-Command Setup** - Bootstrap script for instant start
-- 📦 **Project or Global** - Install per-project or globally for all your work
+Claude pauses mid-task:
 
-## 🚀 Quick Start
+> "I'm about to add a route to `src/routes/`... but I'm assuming that directory exists and follows a consistent pattern. Let me verify:"
 
-### Option 1: Project-Level Installation (Recommended)
+```bash
+#!/bin/bash
+# verification/assumptions/route-structure.sh
 
-Install the skill in your current project:
+if [[ ! -d "src/routes" ]]; then
+    echo "FAIL: src/routes/ does not exist"
+    find . -name "*route*" -o -name "*router*" | grep -v node_modules
+    exit 1
+fi
 
-\`\`\`bash
-# Clone into your project
+echo "PASS: src/routes/ exists"
+ls src/routes/*.ts 2>/dev/null
+```
+
+The script runs, confirms (or refutes) the assumption, and Claude proceeds with certainty.
+
+## Installation
+
+### Project-Level (Recommended)
+
+```bash
 mkdir -p .claude/skills
 git clone https://github.com/andrueanderson/claude-skill-executable-verification.git .claude/skills/executable-verification
+```
 
-# Or download and extract
-curl -L https://github.com/andrueanderson/claude-skill-executable-verification/archive/main.tar.gz | tar xz
-mv claude-skill-executable-verification-main .claude/skills/executable-verification
-\`\`\`
+### Global
 
-### Option 2: Global Installation
-
-Install once, use in all projects:
-
-\`\`\`bash
-# Clone to global skills directory
+```bash
 mkdir -p ~/.claude/skills
 git clone https://github.com/andrueanderson/claude-skill-executable-verification.git ~/.claude/skills/executable-verification
-\`\`\`
+```
 
 ### Verify Installation
 
-Ask Claude Code:
-\`\`\`
+Start Claude Code and ask:
+```
 "What skills are available?"
-\`\`\`
+```
 
-You should see \`executable-verification\` in the list.
+You should see `executable-verification` in the list.
 
-## 📖 Usage
+## How It Works
 
-### Automatic Activation
+The skill teaches Claude to:
 
-The skill automatically activates when you:
-- Implement complex features
-- Refactor large codebases
-- Work with unfamiliar code
-- Make architectural changes
+1. **Recognize** high-risk assumptions (file structure, API behavior, patterns, etc.)
+2. **Assess** whether verification is worth it (not everything needs a script)
+3. **Write** a verification script (bash, TypeScript/bun, Python, etc.)
+4. **Run** the script and incorporate findings
+5. **Store** scripts in `verification/` for reuse
 
-**Example prompts:**
-\`\`\`
-"Implement OAuth authentication"
-"Refactor the auth system to support multiple providers"
-"Add real-time notifications using WebSockets"
-\`\`\`
+### Script Organization
 
-### Manual Activation
+```
+verification/
+├── assumptions/           # "Is X true?" checks
+│   ├── config-structure.sh
+│   ├── api-response-shape.ts
+│   └── uses-prisma.sh
+├── preconditions/         # "Can I do X?" checks
+│   ├── deps-installed.sh
+│   └── required-files-exist.sh
+└── postconditions/        # "Did X work?" checks
+    ├── tests-pass.sh
+    └── build-succeeds.sh
+```
 
-Explicitly request the skill:
-\`\`\`
-"Use executable verification to implement user roles and permissions"
-\`\`\`
+### Script Types
 
-### Quick Bootstrap
+**Bash** - Universal, good for file checks, pattern searches, version checks
+```bash
+#!/bin/bash
+if grep -r "from '@prisma/client'" src/ > /dev/null; then
+    echo "PASS: Project uses Prisma"
+else
+    echo "FAIL: No Prisma imports found"
+    exit 1
+fi
+```
 
-Initialize verification in your project:
+**TypeScript/Bun** - Good for AST analysis, type checking, complex logic
+```typescript
+#!/usr/bin/env bun
+import { existsSync, readFileSync } from "fs";
 
-\`\`\`bash
-.claude/skills/executable-verification/scripts/init-verification.sh
-\`\`\`
+const config = "src/config/index.ts";
+if (!existsSync(config)) {
+  console.log("FAIL: Config not found at", config);
+  process.exit(1);
+}
+console.log("PASS: Config exists");
+```
 
-This creates:
-- \`research/assumptions.ts\` - Research verification template
-- \`planning/preconditions.ts\` - Planning verification template
-- Installs dependencies (ts-morph, tsx)
-- Adds verification scripts to package.json
+**Python** - Good for data analysis, database checks, scripting
+```python
+#!/usr/bin/env python3
+import sqlite3
+conn = sqlite3.connect("data/app.db")
+# Check schema...
+```
 
-## 🎬 Live Demo
+## When Claude Verifies
 
-See executable verification in action:
-- **Blog Post**: [Beyond RPI: Make Your AI Verify Its Assumptions](https://andrueslab.com/topics/artificial-intelligence/executable-verification)
-- **Live Demo**: [Bookmark Tool Implementation](https://andrueslab.com/conversations/executable-verification-demo)
-- **Source Code**: [Verification Scripts](https://github.com/andrueanderson/andrueslab/tree/main/research)
+Claude verifies when assumptions are **high-risk**:
 
-## 📚 Documentation
+| Category | Example | Why Risky |
+|----------|---------|-----------|
+| File structure | "Config is in `src/config/`" | Structures vary wildly |
+| API signatures | "This takes a callback" | Signatures change between versions |
+| Dependencies | "This library handles X" | Undocumented behavior |
+| Patterns | "The codebase uses this style" | Patterns are often inconsistent |
+| External services | "The API returns this shape" | APIs change |
 
-The skill includes comprehensive documentation:
+## Accumulated Value
 
-- **[SKILL.md](SKILL.md)** - Core workflow and principles (loaded by Claude)
-- **[research-phase.md](research-phase.md)** - Deep AST analysis techniques
-- **[planning-phase.md](planning-phase.md)** - Precondition check patterns
-- **[implementation-phase.md](implementation-phase.md)** - Testing best practices
-- **[USAGE.md](USAGE.md)** - Complete usage guide with examples
+Verification scripts become project artifacts:
 
-## 📁 Templates
+- **Re-runnable**: Future sessions can re-verify assumptions
+- **Documentation**: Scripts explain how things actually work
+- **Onboarding**: New team members run scripts to understand the codebase
+- **CI/CD**: Add verification to your pipeline
 
-Ready-to-use templates in \`templates/\`:
+Commit them to git.
 
-- \`research-typescript.ts\` - TypeScript research with ts-morph
-- \`research-javascript.js\` - JavaScript research with file operations
-- \`planning-template.ts\` - Planning preconditions template
-- \`package.json\` - Verification script commands
+## Example Session
 
-## 🔧 Example Workflow
+```
+User: "Add a new API endpoint for user preferences"
 
-### 1. Research Phase
+Claude: I'll add this to the routes. First, let me verify the routing structure...
 
-\`\`\`bash
-npx tsx research/bookmark-feature.ts
-\`\`\`
+[Creates verification/assumptions/routes-structure.sh]
+[Runs script]
 
-**Output:**
-\`\`\`
-✅ Project uses Next.js 15 with App Router
-✅ Sidebar navigation is centralized
-✅ Components use shadcn/ui
-✅ All 12 assumptions verified!
-\`\`\`
+Output:
+PASS: src/routes/ exists with 8 route files
+Pattern: Each route exports a Hono router
 
-### 2. Planning Phase
+Now I know where to put it and what pattern to follow...
+```
 
-\`\`\`bash
-npx tsx planning/bookmark-feature.ts
-\`\`\`
+## The Tradeoff
 
-**Output:**
-\`\`\`
-✅ READY Create feature component
-✅ READY Add to sidebar navigation
-✅ READY Add local storage persistence
-✅ 9/10 steps ready!
-\`\`\`
+Writing verification scripts costs time. But:
+- Debugging wrong assumptions costs more
+- Scripts are reusable
+- Scripts become documentation
+- Confidence increases
 
-### 3. Implementation
+For anything non-trivial, verification pays for itself.
 
-Build your feature, then run tests:
+## Documentation
 
-\`\`\`bash
-npm test
-\`\`\`
+- **[SKILL.md](SKILL.md)** - Core skill definition (loaded by Claude)
+- **[INSTALL.md](INSTALL.md)** - Detailed installation guide
+- **[USAGE.md](USAGE.md)** - Usage patterns and examples
 
-Scripts are named after the feature (e.g., \`bookmark-feature.ts\`) so they accumulate over time and can be re-run in future sessions.
+## Contributing
 
-## 🎯 Benefits
+Contributions welcome! Ideas:
+- More verification script patterns
+- Language-specific templates (Go, Rust, etc.)
+- CI/CD integration examples
 
-1. **Failures Are Localized** - Know exactly which assumption broke
-2. **Self-Correcting** - Actionable error messages guide fixes
-3. **Fewer Human Touchpoints** - Machine validates research/planning
-4. **Reproducible Context** - Re-run verification in new conversations
-5. **Auditable Trail** - Every decision has proof
+## License
 
-## 🛠️ Requirements
+MIT License - see [LICENSE](LICENSE)
 
-- **Claude Code** - This is a Claude Code skill
-- **TypeScript/JavaScript project** - For full AST analysis features
-- **ts-morph** (optional) - For deep TypeScript verification
-- **tsx** (optional) - For running verification scripts
-
-## 📦 What's Included
-
-\`\`\`
-executable-verification/
-├── SKILL.md                      # Main skill definition
-├── README.md                     # This file
-├── USAGE.md                      # Detailed usage guide
-├── research-phase.md             # Research methodology
-├── planning-phase.md             # Planning methodology
-├── implementation-phase.md       # Implementation methodology
-├── scripts/
-│   └── init-verification.sh      # Bootstrap script
-└── templates/
-    ├── research-typescript.ts    # TypeScript research template
-    ├── research-javascript.js    # JavaScript research template
-    ├── planning-template.ts      # Planning template
-    ├── package.json              # NPM scripts
-    └── README.md                 # Template guide
-\`\`\`
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Ideas for Contributions
-
-- Python templates (using \`ast\` module)
-- Go templates (using \`go/parser\`)
-- Rust templates (using \`syn\`)
-- Additional verification patterns
-- More comprehensive examples
-- Integration with CI/CD
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) file for details
-
-## 🙏 Credits
+## Credits
 
 Created by [Andrue Anderson](https://andrueslab.com)
 
-Inspired by the concept of executable verification as an evolution of RPI workflows.
-
-Shoutout to:
-- [@dexhorthy](https://x.com/dexhorthy) for popularizing RPI
-- [@GeoffreyHuntley](https://x.com/GeoffreyHuntley) for the "Ralph Wiggum" approach
-
-## 🔗 Links
-
-- [Blog Post](https://andrueslab.com/topics/artificial-intelligence/executable-verification) - Deep dive into the concept
-- [Live Demo](https://andrueslab.com/conversations/executable-verification-demo) - See it in action
-- [Author's Website](https://andrueslab.com)
-- [Claude Code](https://claude.com/claude-code) - The CLI tool this skill is for
-
-## ⭐ Show Your Support
-
-If you find this skill useful, please consider:
-- ⭐ Starring the repository
-- 🐦 Sharing on social media
-- 📝 Writing about your experience using it
-- 🤝 Contributing improvements
-
 ---
 
-**Built with ❤️ for autonomous AI development**
+**The goal: Shift from "I think X is true" to "I confirmed X is true."**

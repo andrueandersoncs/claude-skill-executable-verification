@@ -1,13 +1,15 @@
 ---
 name: verifying-assumptions
-description: Verifies assumptions before acting by generating and running verification scripts. Triggers on every code task—at minimum one verification script per conversation. Activates when making assumptions about file structure, APIs, dependencies, patterns, runtime state, or any knowledge that could be stale.
+description: Verifies assumptions continuously—before and after every action—by generating and running verification scripts. Every action is based on assumptions; verify preconditions before acting and postconditions after. Triggers on every code task at every decision point. Activates when making assumptions about file structure, APIs, dependencies, patterns, runtime state, or any knowledge that could be stale.
 ---
 
 # Executable Verification
 
-**Default behavior: Verify first, act second.**
+**Default behavior: Verify continuously—before acting, after acting, and at every decision point.**
 
-Every conversation involving code changes should include verification scripts. Do not assume—confirm. Write a script, run it, then proceed based on evidence.
+Every action you take is based on assumptions. Most failures stem from incorrect assumptions, not lack of capability. The solution: make verification a continuous habit, not a one-time step.
+
+Do not assume—confirm. Write a script, run it, then proceed based on evidence. Then verify again after acting.
 
 ## Start of Every Task
 
@@ -16,10 +18,11 @@ Before making any code changes, ask yourself:
 1. **What am I assuming about this codebase?** (file locations, patterns, APIs)
 2. **What am I assuming about the runtime?** (services running, ports, connections)
 3. **Which assumptions could be wrong?**
+4. **What should be true after I act?** (postconditions to verify)
 
 Then write verification scripts for assumptions that matter. This is mandatory, not optional.
 
-**Minimum per conversation:** At least one verification script. If you haven't written one, you're likely making unchecked assumptions.
+**Minimum per task:** At least one precondition verification (before acting) AND one postcondition verification (after acting). If you haven't written both, you're likely making unchecked assumptions or not confirming your changes worked.
 
 ## What to Verify
 
@@ -41,16 +44,84 @@ Verify by default. The question is not "should I verify?" but "what should I ver
 - Calling an API you haven't tested
 - Any knowledge that could be stale
 
-## Verification Workflow
+## When to Verify
+
+Verification is not a one-time step—it's a continuous loop. Every action you take is based on assumptions that could be wrong.
+
+### Before Every Action (Preconditions)
+
+Before taking any action, verify the assumptions it depends on:
+
+| Action | Verify First |
+|--------|--------------|
+| Editing a file | File exists, has expected structure, patterns match what you expect |
+| Running a command | Dependencies installed, correct versions, required services running |
+| Calling an API | Endpoint exists, expected signature, authentication works |
+| Creating a file | Directory exists, no naming conflicts, follows project conventions |
+| Installing a package | Compatible with existing deps, no security issues, correct registry |
+
+### After Every Action (Postconditions)
+
+After taking any action, verify it had the intended effect:
+
+| Action | Verify After |
+|--------|--------------|
+| Edited a file | Syntax valid, tests pass, no regressions introduced |
+| Ran a command | Expected output, exit code 0, side effects as expected |
+| Created a file | File exists, contents correct, permissions right |
+| Installed a package | Package in lockfile, imports work, no version conflicts |
+| Started a service | Service responding, correct port, logs show success |
+
+### During Multi-Step Operations
+
+For complex tasks, verify at each transition point:
 
 ```
-Verification:
-- [ ] Listed assumptions I'm making
-- [ ] Chose target: verification/ (persistent) or $VERIFY_SESSION (ephemeral)
-- [ ] Wrote script(s)
-- [ ] Ran script(s)
-- [ ] Proceeded based on evidence (or pivoted if wrong)
+Step 1: Verify preconditions → Act → Verify postconditions
+         ↓
+Step 2: Verify preconditions → Act → Verify postconditions
+         ↓
+Step 3: Verify preconditions → Act → Verify postconditions
 ```
+
+**Never chain multiple actions without intermediate verification.** Each step's postconditions become the next step's preconditions—verify them explicitly.
+
+### Verification Frequency Guide
+
+| Situation | Frequency |
+|-----------|-----------|
+| Unfamiliar codebase | Verify before AND after every action |
+| Familiar codebase, risky change | Verify before AND after |
+| Familiar codebase, routine change | Verify after (minimum) |
+| External dependencies involved | Always verify before AND after |
+| Production-affecting changes | Verify at every step |
+
+**When in doubt, over-verify.** The cost of writing a quick verification script is far less than the cost of acting on a wrong assumption.
+
+## Verification Workflow
+
+For each action:
+
+```
+Before Acting:
+- [ ] What assumptions am I making?
+- [ ] Write precondition verification script(s)
+- [ ] Run script(s) — all pass?
+- [ ] If any fail: STOP, reassess, do not proceed
+
+Take Action:
+- [ ] Execute the planned action
+
+After Acting:
+- [ ] What should be true now?
+- [ ] Write postcondition verification script(s)
+- [ ] Run script(s) — all pass?
+- [ ] If any fail: diagnose, fix, re-verify
+```
+
+Choose script location:
+- **Persistent** (`verification/`): File structure, patterns, API signatures—things that should remain true
+- **Ephemeral** (`$VERIFY_SESSION/`): Runtime state, services, ports—things that vary by session
 
 ## Script Organization
 
@@ -85,7 +156,11 @@ All scripts should:
 
 ## Exceptions
 
-Skip verification only when you're about to read/examine the thing anyway. When in doubt, verify.
+Skip **precondition** verification only when you're about to read/examine the thing anyway.
+
+**Never skip postcondition verification.** You must always confirm your actions had the intended effect.
+
+When in doubt, verify both.
 
 ## Ephemeral Verification
 

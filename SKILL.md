@@ -1,6 +1,6 @@
 ---
 name: verifying-assumptions
-description: Write verification scripts to FILES and execute them before and after every code change. Never run verification logic inline. When you think "I assume X is true," stop and write a script file to prove it. Verification = script file on disk, not inline bash.
+description: MANDATORY verification before/after code changes. Triggers on: modifying files, calling APIs, assuming file locations, checking dependencies, first time in codebase. ALWAYS write script to file, execute, then proceed. Never inline verification.
 ---
 
 # Executable Verification
